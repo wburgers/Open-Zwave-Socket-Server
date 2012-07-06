@@ -76,7 +76,7 @@ if($node=filter_input(INPUT_POST,'node_node',FILTER_VALIDATE_INT))
         $_SESSION['msg']=sendReceiveMessage($msg);
         sleep(1);
     }
-
+//not really the best way to get the node name (assumes no other controller is in the way)
     if($_POST['node_name'] != $devices[$node-2]['name'] ||  $_POST['node_group'] != $devices[$node-2]['group'])
     {
 
