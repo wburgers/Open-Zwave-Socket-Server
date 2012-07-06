@@ -1,4 +1,13 @@
 This code needs a lot of work.  The goal for me was a quick interface to access some basic switches and wall outlets
 from my Raspberry Pi.
 
-You can read more at http://thomasloughlin.com
+First step is to get open-zwave(http://code.google.com/p/open-zwave/) compiled on your device.  I wrote a quick blog
+about it http://thomasloughlin.com/z-wave-controller-setup-on-my-raspberry-pi/
+
+http://conradvassallo.com/category/open-zwave-controller/ is working on an almost identical project but has a better ui.
+
+Few notes:
+1. I have noticed that the higher the node number of the devices, the slower the response (or polled) message is.  I
+think this is to be expected.
+2. With my simple client, some of the high number nodes will not update in time before the page reloads (even with a 1-2
+second sleep).  The better solution would be AJAX polling for the latest status.
