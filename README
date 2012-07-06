@@ -1,1 +1,4 @@
-This file was created by JetBrains PhpStorm 4.0.3 for binding GitHub repository
+This code needs a lot of work.  The goal for me was a quick interface to access some basic switches and wall outlets
+from my Raspberry Pi.
+
+You can read more at http://thomasloughlin.com
