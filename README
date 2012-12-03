@@ -4,6 +4,8 @@ from my Raspberry Pi.
 First step is to get open-zwave(http://code.google.com/p/open-zwave/) compiled on your device.  I wrote a quick blog
 about it http://thomasloughlin.com/z-wave-controller-setup-on-my-raspberry-pi/
 
+Also worth taking a look at: https://github.com/tagroup/php-zwave-christmas-socket-client
+
 http://conradvassallo.com/category/open-zwave-controller/ is working on an almost identical project but has a better ui.
 
 Few notes:
