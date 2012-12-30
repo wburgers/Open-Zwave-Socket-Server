@@ -353,8 +353,9 @@ int main(int argc, char* argv[]) {
  for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
 			string tempstr="";
 			Manager::Get()->GetValueAsString(*it5,&tempstr);                   
-			tempstr= "="+tempstr; 
-                        nodeValue+=" "+ Manager::Get()->GetValueLabel(*it5) +tempstr;
+			tempstr= "="+tempstr;
+			//hack to delimit values .. need to properly escape all values
+                        nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
                         
                     
                 }
@@ -391,16 +392,18 @@ int main(int argc, char* argv[]) {
                             printf("Command: %s", command.c_str());
                             if (command == "DEVICE") {
                                 //check type
-                                deviceType = v[v.size() - 1];
+                                //deviceType = v[v.size() - 1];
 
                                 int Node = 0;
                                 int Level = 0;
                                 string Type = "";
+                                string Option = "";
 
                                 Level = atoi(v[2].c_str());
                                 Node = atoi(v[1].c_str());
                                 Type = v[3].c_str();
                                 Type = trim(Type);
+                                Option=v[4].c_str();
 
                                 if ((Type == "Multilevel Switch") || (Type == "Multilevel Power Switch")) {
                                     pthread_mutex_lock(&g_criticalSection);
@@ -416,6 +419,13 @@ int main(int argc, char* argv[]) {
                                     } else {
                                         Manager::Get()->SetNodeOn(g_homeId, Node);
                                     }
+                                    pthread_mutex_unlock(&g_criticalSection);
+                                }
+                                if (Type == "General Thermostat V2") {
+                                    pthread_mutex_lock(&g_criticalSection);
+                                    //hmm adding options and will evaluate commands based on int Level to start
+                                    //need to practice changing modes
+
                                     pthread_mutex_unlock(&g_criticalSection);
                                 }
 

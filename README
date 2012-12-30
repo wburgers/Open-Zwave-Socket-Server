@@ -10,7 +10,8 @@ and http://thomasloughlin.com/new-open-zwave-image-for-raspberry-pi/
 http://conradvassallo.com/category/open-zwave-controller/ is working on an almost identical project but has a better ui.
 
 Few notes:
-1. I have noticed that the higher the node number of the devices, the slower the response (or polled) message is.  I
+1. Restructuring some things - will be a few days
+2. I have noticed that the higher the node number of the devices, the slower the response (or polled) message is.  I
 think this is to be expected.
-2. With my simple client, some of the high number nodes will not update in time before the page reloads (even with a 1-2
+3. With my simple client, some of the high number nodes will not update in time before the page reloads (even with a 1-2
 second sleep).  The better solution would be AJAX polling for the latest status.
