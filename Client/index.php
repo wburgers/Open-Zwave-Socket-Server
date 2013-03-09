@@ -161,9 +161,9 @@ foreach($devices as $device)
     else{
         
     
-        echo "<input type=text value='" . $device['status'] . "' disabled></div><input type='hidden' name='node_status' value='" . opposite($device['status']) . "'>
+        echo "<input type=text value='" . $device['status'] . "' disabled></div><input type='hidden' name='node_status' value='" . opposite($device['status']) . "'>";
     }
- <input type='hidden' name='node_node' value='" . $device['node'] . "'>
+echo "<input type='hidden' name='node_node' value='" . $device['node'] . "'>
     </form></div> ";
 }
 
