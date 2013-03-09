@@ -53,6 +53,12 @@ function getDevices()
             {
                          $devices[$c]['status']='Off';
             }
+            if($device[4]=='Multilevel Power Switch')
+            {
+                $temp=explode(' Basic=',$device[5]);
+                $temp= explode(' ',$temp[1])
+                $devices[$c]['status']=$temp[0];
+            }
                 $c++;
                 }
 
@@ -66,11 +72,21 @@ if($node=filter_input(INPUT_POST,'node_node',FILTER_VALIDATE_INT))
 
     //DEVICE~2~255~Binary Switch
     //SETNODE~2~TESTLAMP~1
-    $msg="DEVICE~$node~0~Binary Switch";
-    if($_POST['node_status']=='On')
+    //
+    if($_POST['node_type']=='Multilevel Power Switch')
     {
-        $msg="DEVICE~$node~255~Binary Switch";
+      $msg= "DEVICE~$node~". $_POST['node_status'] . "~". $_POST['node_type'];
+        
     }
+    if($_POST['node_type']=='Binary Power Switch' || $_POST['node_type']=='Binary Switch')
+    {
+        $msg="DEVICE~$node~0~Binary Switch";
+        if($_POST['node_status']=='On')
+        {
+            $msg="DEVICE~$node~255~Binary Switch";
+        }
+    }
+    //don't resubmit
     if($devices[$node-2]['status']!=$_POST['node_status'])
     {
         $_SESSION['msg']=sendReceiveMessage($msg);
@@ -134,7 +150,19 @@ foreach($devices as $device)
      <div class='field_container'><label>Type:</label><input type='text' name='node_type' value='" . $device['type'] . "' disabled></div>
         <div class='field_container'><label>Group:</label><input type='text' name='node_group' value='" . $device['group'] . "'></div>
 
-    <div class='field_container'><label>Status: </label><input type=text value='" . $device['status'] . "' disabled></div><input type='hidden' name='node_status' value='" . opposite($device['status']) . "'>
+    <div class='field_container'><label>Status: </label>";
+    
+    //horrible hack
+    if($device['type']=='Multilevel Power Switch')
+    {
+        
+         echo "<input type=text name='node_status' value='" . $device['status'] . "'></div>";
+    }
+    else{
+        
+    
+        echo "<input type=text value='" . $device['status'] . "' disabled></div><input type='hidden' name='node_status' value='" . opposite($device['status']) . "'>
+    }
  <input type='hidden' name='node_node' value='" . $device['node'] . "'>
     </form></div> ";
 }
