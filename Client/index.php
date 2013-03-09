@@ -56,7 +56,7 @@ function getDevices()
             if($device[4]=='Multilevel Power Switch')
             {
                 $temp=explode(' Basic=',$device[5]);
-                $temp= explode(' ',$temp[1])
+                $temp= explode(' ',$temp[1]);
                 $devices[$c]['status']=$temp[0];
             }
                 $c++;
