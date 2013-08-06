@@ -22,9 +22,11 @@ DEBUG_LDFLAGS   := -g
 CFLAGS  := -c $(DEBUG_CFLAGS)
 LDFLAGS := $(DEBUG_LDFLAGS)
 
-INCLUDES        := -I ../../../src -I ../../../src/command_classes/ -I ../../../src/value_classes/ \
-        -I ../../../src/platform/ -I ../../../h/platform/unix -I ../../../tinyxml/ -I ../../../hidapi/hidapi/   
-LIBS = $(wildcard ../../../lib/linux/*.a)
+INCLUDES	:= -I ../../../src -I ../../../src/command_classes/ -I ../../../src/value_classes/ \
+        	-I ../../../src/platform/ -I ../../../h/platform/unix -I ../../../tinyxml/ \
+		-I ../../../hidapi/hidapi/
+
+LIBS = $(wildcard ../../../lib/linux/*.a) 
 
 %.o : %.cpp
 	$(CXX) $(CFLAGS) $(INCLUDES) -o $@ $<
@@ -34,8 +36,14 @@ all: test
 lib:
 	$(MAKE) -C ../../../build/linux
 
-test:   Main.o lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) -pthread -ludev
+ServerSocket: ServerSocket.o
+	$(LD) -o ServerSocket.o ServerSocket.cpp
+
+Socket: Socket.o
+	$(LD) -o Socket.o Socket.cpp
+
+test: Main.o ServerSocket.o Socket.o lib
+	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) ServerSocket.o Socket.o -pthread -ludev
 
 clean:
 	rm -f test Main.o
