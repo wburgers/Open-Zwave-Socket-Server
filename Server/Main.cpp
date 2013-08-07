@@ -273,7 +273,8 @@ int main(int argc, char* argv[]) {
     // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
     // The second argument is the path for saved Z-Wave network state and the log file.  If you leave it NULL 
     // the log file will appear in the program's working directory.
-    Options::Create("../../../../config/", "", "");
+	Options::Create("../../../../config/", "", "");
+    //Options::Create("./config/", "", "");
     Options::Get()->Lock();
 
     Manager::Create();
@@ -344,33 +345,28 @@ int main(int argc, char* argv[]) {
                                 string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
                                 string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
                                 string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
-
-
-
-				string nodeValue ="";//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
-//The point of this was to help me figure out what the node values looked like
- for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
-			string tempstr="";
-			Manager::Get()->GetValueAsString(*it5,&tempstr);                   
-			tempstr= "="+tempstr;
-			//hack to delimit values .. need to properly escape all values
-                        nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
-                        
-                    
-                }
-
+								string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
+														//The point of this was to help me figure out what the node values looked like
+								for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
+									string tempstr="";
+									Manager::Get()->GetValueAsString(*it5,&tempstr);                   
+									tempstr= "="+tempstr;
+									//hack to delimit values .. need to properly escape all values
+									nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
+								}
 
                                 if (nodeName.size() == 0) nodeName = "Undefined";
 
                                 if (nodeType != "Static PC Controller") {
-                                    stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
-                                    ssNodeName << nodeName;
-                                    ssNodeId << nodeID;
-                                    ssNodeType << nodeType;
-                                    ssNodeZone << nodeZone;
-				    ssNodeValue << nodeValue;
-                                    device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
+									stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
+									ssNodeName << nodeName;
+									ssNodeId << nodeID;
+									ssNodeType << nodeType;
+									ssNodeZone << nodeZone;
+									ssNodeValue << nodeValue;
+									device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
                                 }
+								
                             }
                             device = device.substr(0, device.size() - 1) + "\n";                           
                             printf("Sent Device List \n");
@@ -389,7 +385,7 @@ int main(int argc, char* argv[]) {
                             string command = sCommand.str();
                             
                             printf("Command: %s", command.c_str());
-                            if (command == "DEVICE") {
+                            if (command == "DEVICE" && v.size() == 5) {
                                 //check type
                                 //deviceType = v[v.size() - 1];
 
@@ -414,7 +410,6 @@ int main(int argc, char* argv[]) {
                                     pthread_mutex_lock(&g_criticalSection);
                                     if (Level == 0) {
                                         Manager::Get()->SetNodeOff(g_homeId, Node);
-
                                     } else {
                                         Manager::Get()->SetNodeOn(g_homeId, Node);
                                     }
@@ -463,8 +458,6 @@ int main(int argc, char* argv[]) {
 
                             //  sleep(5);
                         }
-
-
                     }
                 } catch (SocketException&) {
                 }
