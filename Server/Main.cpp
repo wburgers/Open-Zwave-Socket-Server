@@ -51,6 +51,7 @@
 #include <stdlib.h>
 #include <sstream>
 #include <iostream>
+#include <stdexcept>
 
 using namespace OpenZWave;
 
@@ -254,6 +255,20 @@ string trim(string s) {
     return s.erase(s.find_last_not_of(" \n\r\t") + 1);
 }
 
+template <typename T>
+T lexical_cast(const std::string& s)
+{
+    std::stringstream ss(s);
+
+    T result;
+    if ((ss >> result).fail() || !(ss >> std::ws).eof())
+    {
+        throw std::runtime_error("Bad cast");
+    }
+
+    return result;
+}
+
 //-----------------------------------------------------------------------------
 // <main>
 // Create the driver and then wait
@@ -271,10 +286,11 @@ int main(int argc, char* argv[]) {
 
     // Create the OpenZWave Manager.
     // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
-    // The second argument is the path for saved Z-Wave network state and the log file.  If you leave it NULL 
+    // The second argument is the path for the log file. If you leave it NULL
     // the log file will appear in the program's working directory.
+	// The third argument is the path to the saved Z-Wave network state
 	Options::Create("../../../../config/", "", "");
-    //Options::Create("./config/", "", "");
+    //Options::Create("./config/", "./cpp/examples/linux/server", "");
     Options::Get()->Lock();
 
     Manager::Create();
@@ -300,51 +316,40 @@ int main(int argc, char* argv[]) {
 
     if (!g_initFailed) {
 
-        //Manager::Get()->WriteConfig(g_homeId);
+        Manager::Get()->WriteConfig(g_homeId);
 
         Driver::DriverData data;
         Manager::Get()->GetDriverStatistics(g_homeId, &data);
 
-           printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.m_SOFCnt, data.m_ACKWaiting, data.m_readAborts, data.m_badChecksum);
-           printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
-           printf("Dropped: %d Retries: %d\n", data.m_dropped, data.m_retries);
-        printf("***************************************************** \n");
-        printf("6004 ZWaveCommander Server \n");
-
-        //Manager::Get()->SetNodeName(g_homeId, 3, "Lampshade");
-        
-        
-        try {
-            // Create the socket
-            ServerSocket server(6004);
-            while (true) {
-                //pthread_mutex_lock(&g_criticalSection);
-                // Do stuff            
-                ServerSocket new_sock;
+		printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.m_SOFCnt, data.m_ACKWaiting, data.m_readAborts, data.m_badChecksum);
+		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
+		printf("Dropped: %d Retries: %d\n", data.m_dropped, data.m_retries);
+		printf("***************************************************** \n");
+		printf("6004 ZWaveCommander Server \n");
+		
+		while(true) {
+			try { // for all socket errors
+				ServerSocket server(6004);
+				ServerSocket new_sock;
                 server.accept(new_sock);
-                try {
-                    while (true) {
-
-
-                        std::string data;
-                        new_sock >> data;
-
-                        //get zwave commands
-
-                        //if (trim(data.c_str()) == "BYE") exit(0);
-
-                        //give list of devices
-                        if (trim(data.c_str()) == "ALIST") {
-                            string device;
-                            for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-                                NodeInfo* nodeInfo = *it;
-                                int nodeID = nodeInfo->m_nodeId;
-                                //This refreshed node could be cleaned up - I added the quick hack so I would get status
-                                // or state changes that happened on the switch itself or due to another event / [rpcess
-				                bool isRePolled= Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
-                                string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
-                                string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
-                                string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
+				
+				while(true) {
+					try { // command parsing errors
+						//get commands from the socket
+						std::string data;
+						new_sock >> data;
+						//give list of devices
+						if (trim(data.c_str()) == "ALIST") {
+							string device;
+							for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+								NodeInfo* nodeInfo = *it;
+								int nodeID = nodeInfo->m_nodeId;
+								//This refreshed node could be cleaned up - I added the quick hack so I would get status
+								// or state changes that happened on the switch itself or due to another event / [rpcess
+								bool isRePolled= Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
+								string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+								string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
+								string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
 								string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
 														//The point of this was to help me figure out what the node values looked like
 								for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
@@ -355,9 +360,9 @@ int main(int argc, char* argv[]) {
 									nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
 								}
 
-                                if (nodeName.size() == 0) nodeName = "Undefined";
+								if (nodeName.size() == 0) nodeName = "Undefined";
 
-                                if (nodeType != "Static PC Controller") {
+								if (nodeType != "Static PC Controller") {
 									stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
 									ssNodeName << nodeName;
 									ssNodeId << nodeID;
@@ -365,108 +370,110 @@ int main(int argc, char* argv[]) {
 									ssNodeZone << nodeZone;
 									ssNodeValue << nodeValue;
 									device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
-                                }
+								}
 								
-                            }
-                            device = device.substr(0, device.size() - 1) + "\n";                           
-                            printf("Sent Device List \n");
-                            new_sock << device;
-                        }
+							}
+							device = device.substr(0, device.size() - 1) + "\n";                           
+							printf("Sent Device List \n");
+							new_sock << device;
+						}
 
-                        vector<string> v;
-                        split(data, '~', v);
+						vector<string> v;
+						split(data, '~', v);
 
-                        string command, deviceType;
+						string command, deviceType;
 
-                        if (v.size() > 0) {
-                            //check Type of Command
-                            stringstream sCommand;
-                            sCommand << v[0].c_str();
-                            string command = sCommand.str();
-                            
-                            printf("Command: %s", command.c_str());
-                            if (command == "DEVICE" && v.size() == 5) {
-                                //check type
-                                //deviceType = v[v.size() - 1];
+						if (v.size() > 0) {
+							//check Type of Command
+							stringstream sCommand;
+							sCommand << v[0].c_str();
+							string command = sCommand.str();
+							
+							printf("Command: %s\n", command.c_str());
+							if (command == "DEVICE" && v.size() == 5) {
+								//check type
+								//deviceType = v[v.size() - 1];
 
-                                int Node = 0;
-                                int Level = 0;
-                                string Type = "";
-                                string Option = "";
+								int Node = 0;
+								int Level = 0;
+								string Type = "";
+								string Option = "";
 
-                                Level = atoi(v[2].c_str());
-                                Node = atoi(v[1].c_str());
-                                Type = v[3].c_str();
-                                Type = trim(Type);
-                                Option=v[4].c_str();
+								Level = lexical_cast<int>(v[2].c_str());
+								Node = lexical_cast<int>(v[1].c_str());
+								Type = v[3].c_str();
+								Type = trim(Type);
+								Option=v[4].c_str();
 
-                                if ((Type == "Multilevel Switch") || (Type == "Multilevel Power Switch")) {
-                                    pthread_mutex_lock(&g_criticalSection);
-                                    Manager::Get()->SetNodeLevel(g_homeId, Node, Level);
-                                    pthread_mutex_unlock(&g_criticalSection);
-                                }
+								if ((Type == "Multilevel Switch") || (Type == "Multilevel Power Switch")) {
+									pthread_mutex_lock(&g_criticalSection);
+									Manager::Get()->SetNodeLevel(g_homeId, Node, Level);
+									pthread_mutex_unlock(&g_criticalSection);
+								}
 
-                                if (Type == "Binary Switch") {
-                                    pthread_mutex_lock(&g_criticalSection);
-                                    if (Level == 0) {
-                                        Manager::Get()->SetNodeOff(g_homeId, Node);
-                                    } else {
-                                        Manager::Get()->SetNodeOn(g_homeId, Node);
-                                    }
-                                    pthread_mutex_unlock(&g_criticalSection);
-                                }
-                                if (Type == "General Thermostat V2") {
-                                    pthread_mutex_lock(&g_criticalSection);
-                                    //hmm adding options and will evaluate commands based on int Level to start
-                                    //need to practice changing modes
+								if (Type == "Binary Switch") {
+									pthread_mutex_lock(&g_criticalSection);
+									if (Level == 0) {
+										Manager::Get()->SetNodeOff(g_homeId, Node);
+									} else {
+										Manager::Get()->SetNodeOn(g_homeId, Node);
+									}
+									pthread_mutex_unlock(&g_criticalSection);
+								}
+								if (Type == "General Thermostat V2") {
+									pthread_mutex_lock(&g_criticalSection);
+									//hmm adding options and will evaluate commands based on int Level to start
+									//need to practice changing modes
 
-                                    pthread_mutex_unlock(&g_criticalSection);
-                                }
+									pthread_mutex_unlock(&g_criticalSection);
+								}
 
-                                stringstream ssNode, ssLevel;
-                                ssNode << Node;
-                                ssLevel << Level;
-                                string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
-                                new_sock << result;
-                            }
+								stringstream ssNode, ssLevel;
+								ssNode << Node;
+								ssLevel << Level;
+								string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
+								new_sock << result;
+							}
 
-                            if (command == "SETNODE") {
-                                int Node = 0;
-                                string NodeName = "";
-                                string NodeZone = "";
-                                
-                                Node = atoi(v[1].c_str());
-                                NodeName = v[2].c_str();
-                                NodeName = trim(NodeName);
-                                NodeZone = v[3].c_str();
-                                
-                                pthread_mutex_lock(&g_criticalSection);
-                                Manager::Get()->SetNodeName(g_homeId, Node, NodeName);
-                                Manager::Get()->SetNodeLocation(g_homeId, Node, NodeZone);
-                                pthread_mutex_unlock(&g_criticalSection);
-                                
-                                stringstream ssNode, ssName, ssZone;
-                                ssNode << Node;
-                                ssName << NodeName;
-                                ssZone << NodeZone;
-                                string result = "MSG~ZWave Name set Node=" + ssNode.str() + " Name=" + ssName.str() + " Zone=" + ssZone.str() + "\n";
-                                new_sock << result;
-                                
-                                //save details to XML
-                                Manager::Get()->WriteConfig(g_homeId);
-                            }
-
-                            //  sleep(5);
-                        }
-                    }
-                } catch (SocketException&) {
-                }
-                //pthread_mutex_unlock(&g_criticalSection);
-                //sleep(5);
-            }
-        } catch (SocketException& e) {
-            printf("Exception was caught:");
-        }
+							if (command == "SETNODE") {
+								int Node = 0;
+								string NodeName = "";
+								string NodeZone = "";
+								
+								Node = atoi(v[1].c_str());
+								NodeName = v[2].c_str();
+								NodeName = trim(NodeName);
+								NodeZone = v[3].c_str();
+								
+								pthread_mutex_lock(&g_criticalSection);
+								Manager::Get()->SetNodeName(g_homeId, Node, NodeName);
+								Manager::Get()->SetNodeLocation(g_homeId, Node, NodeZone);
+								pthread_mutex_unlock(&g_criticalSection);
+								
+								stringstream ssNode, ssName, ssZone;
+								ssNode << Node;
+								ssName << NodeName;
+								ssZone << NodeZone;
+								string result = "MSG~ZWave Name set Node=" + ssNode.str() + " Name=" + ssName.str() + " Zone=" + ssZone.str() + "\n";
+								new_sock << result;
+								
+								//save details to XML
+								Manager::Get()->WriteConfig(g_homeId);
+							}
+						}
+					}
+					catch (std::exception const& e) {
+						std::cout << "Exception: " << e.what() << endl;
+					}
+				}
+			}
+			catch (SocketException& e) {
+				std::cout << "SocketException: " << e.description() << endl;
+			}
+			catch(...) {
+				std::cout << "Other exception" << endl;
+			}
+		}
     }
 
     Manager::Destroy();
