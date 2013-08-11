@@ -294,9 +294,8 @@ int main(int argc, char* argv[]) {
 
     // Create the OpenZWave Manager.
     // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
-    // The second argument is the path for the log file. If you leave it NULL
+    // The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
     // the log file will appear in the program's working directory.
-	// The third argument is the path to the saved Z-Wave network state
 	Options::Create("../../../../config/", "", "");
     //Options::Create("./config/", "./cpp/examples/linux/server", "");
     Options::Get()->Lock();
