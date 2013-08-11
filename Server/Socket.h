@@ -35,19 +35,21 @@ class Socket
   // Data Transimission
   bool send ( const std::string ) const;
   int recv ( std::string& ) const;
-
+  
+  const Socket& operator << ( const std::string& ) const;
+  const Socket& operator >> ( std::string& ) const;
 
   void set_non_blocking ( const bool );
 
   bool is_valid() const { return m_sock != -1; }
+  
+  // Access the Sock
+  int GetSock(void) const    { return(m_sock);  };
+  void SetSock(int sock)    { m_sock = sock;  };
 
  private:
-
   int m_sock;
   sockaddr_in m_addr;
-
-
 };
-
 
 #endif

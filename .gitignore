@@ -1,0 +1,5 @@
+*.o
+test
+OZW_log.txt
+make_log.txt
+zw*.xml
