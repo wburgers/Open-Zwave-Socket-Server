@@ -36,14 +36,11 @@ all: test
 lib:
 	$(MAKE) -C ../../../build/linux
 
-ServerSocket: ServerSocket.o
-	$(LD) -o ServerSocket.o ServerSocket.cpp
-
 Socket: Socket.o
 	$(LD) -o Socket.o Socket.cpp
 
-test: Main.o ServerSocket.o Socket.o lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) ServerSocket.o Socket.o -pthread -ludev
+test: Main.o Socket.o lib
+	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o -pthread -ludev
 
 clean:
 	rm -f test Main.o
