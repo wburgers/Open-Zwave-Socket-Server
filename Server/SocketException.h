@@ -12,7 +12,7 @@ class SocketException
   SocketException ( std::string s ) : m_s ( s ) {};
   ~SocketException (){};
 
-  std::string description() { return m_s; }
+  std::string what() { return m_s; }
 
  private:
 

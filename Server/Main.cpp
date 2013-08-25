@@ -44,6 +44,7 @@
 
 #include "Socket.h"
 #include "SocketException.h"
+#include "ProtocolException.h"
 #include <string>
 #include <iostream>
 #include <stdio.h>
@@ -72,6 +73,16 @@ static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
+enum Commands {Undefined = 0, AList, Device, SetNode};
+static std::map<std::string, Commands> s_mapStringValues;
+
+void create_string_map()
+{
+    s_mapStringValues["ALIST"] = AList;
+	s_mapStringValues["DEVICE"] = Device;
+	s_mapStringValues["SETNODE"] = SetNode;
+}
+	
 //-----------------------------------------------------------------------------
 // <GetNodeInfo>
 // Callback that is triggered when a value, group or node changes
@@ -252,9 +263,8 @@ void split(const string& s, char c, vector<string>& v) {
         v.push_back(s.substr(i, j - i));
         i = ++j;
         j = s.find(c, j);
-        if (j == string::npos)
-            v.push_back(s.substr(i, s.length()));
     }
+	v.push_back(s.substr(i, s.length()));
 }
 
 string trim(string s) {
@@ -296,8 +306,8 @@ int main(int argc, char* argv[]) {
     // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
     // The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
     // the log file will appear in the program's working directory.
-	Options::Create("../../../../config/", "", "");
-    //Options::Create("./config/", "./cpp/examples/linux/server", "");
+	//Options::Create("../../../../config/", "", "");
+    Options::Create("./config/", "", "");
     Options::Get()->Lock();
 
     Manager::Create();
@@ -322,11 +332,12 @@ int main(int argc, char* argv[]) {
     pthread_cond_wait(&initCond, &initMutex);
 
     if (!g_initFailed) {
+	
+		create_string_map();
+		Manager::Get()->WriteConfig(g_homeId);
 
-        Manager::Get()->WriteConfig(g_homeId);
-
-        Driver::DriverData data;
-        Manager::Get()->GetDriverStatistics(g_homeId, &data);
+		Driver::DriverData data;
+		Manager::Get()->GetDriverStatistics(g_homeId, &data);
 
 		printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.m_SOFCnt, data.m_ACKWaiting, data.m_readAborts, data.m_badChecksum);
 		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
@@ -359,7 +370,7 @@ int main(int argc, char* argv[]) {
 				}
 			}
 			catch (SocketException& e) {
-				std::cout << "SocketException: " << e.description() << endl;
+				std::cout << "SocketException: " << e.what() << endl;
 			}
 			catch(...) {
 				std::cout << "Other exception" << endl;
@@ -370,13 +381,11 @@ int main(int argc, char* argv[]) {
     }
 
 	// program exit (clean up)
-	if(strcasecmp(port.c_str(), "usb") == 0)
-	{
-			Manager::Get()->RemoveDriver("HID Controller");
+	if(strcasecmp(port.c_str(), "usb") == 0) {
+		Manager::Get()->RemoveDriver("HID Controller");
 	}
-	else
-	{
-			Manager::Get()->RemoveDriver(port);
+	else {
+		Manager::Get()->RemoveDriver(port);
 	}
 	Manager::Get()->RemoveWatcher(OnNotification, NULL);
 	Manager::Destroy();
@@ -394,67 +403,60 @@ void *process_commands(void* arg)
 			//get commands from the socket
 			std::string data;
 			thread_sock >> data;
-			if(data.c_str() == ""){ //client closed the connection
+			if(strcmp(data.c_str(), "") == 0){ //client closed the connection
 				std::cout << "Client closed the connection" << endl;
 				return 0;
 			}
 			
-			//give list of devices
-			if (trim(data.c_str()) == "ALIST") {
-				string device;
-				for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-					NodeInfo* nodeInfo = *it;
-					int nodeID = nodeInfo->m_nodeId;
-					//This refreshed node could be cleaned up - I added the quick hack so I would get status
-					// or state changes that happened on the switch itself or due to another event / [rpcess
-					bool isRePolled= Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
-					string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
-					string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
-					string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
-					string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
-											//The point of this was to help me figure out what the node values looked like
-					for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
-						string tempstr="";
-						Manager::Get()->GetValueAsString(*it5,&tempstr);                   
-						tempstr= "="+tempstr;
-						//hack to delimit values .. need to properly escape all values
-						nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
-					}
-
-					if (nodeName.size() == 0) nodeName = "Undefined";
-
-					if (nodeType != "Static PC Controller") {
-						stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
-						ssNodeName << nodeName;
-						ssNodeId << nodeID;
-						ssNodeType << nodeType;
-						ssNodeZone << nodeZone;
-						ssNodeValue << nodeValue;
-						device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
-					}
-					
-				}
-				device = device.substr(0, device.size() - 1) + "\n";                           
-				printf("Sent Device List \n");
-				thread_sock << device;
-			}
-
 			vector<string> v;
 			split(data, '~', v);
+			switch (s_mapStringValues[trim(v[0].c_str())])
+			{
+				case AList:
+				{
+					string device;
+					for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+						NodeInfo* nodeInfo = *it;
+						int nodeID = nodeInfo->m_nodeId;
+						//This refreshed node could be cleaned up - I added the quick hack so I would get status
+						// or state changes that happened on the switch itself or due to another event / [rpcess
+						bool isRePolled= Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
+						string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+						string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
+						string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
+						string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
+												//The point of this was to help me figure out what the node values looked like
+						for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
+							string tempstr="";
+							Manager::Get()->GetValueAsString(*it5,&tempstr);                   
+							tempstr= "="+tempstr;
+							//hack to delimit values .. need to properly escape all values
+							nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
+						}
 
-			string command, deviceType;
+						if (nodeName.size() == 0) nodeName = "Undefined";
 
-			if (v.size() > 0) {
-				//check Type of Command
-				stringstream sCommand;
-				sCommand << v[0].c_str();
-				string command = sCommand.str();
-				
-				printf("Command: %s\n", command.c_str());
-				if (command == "DEVICE" && v.size() == 5) {
-					//check type
-					//deviceType = v[v.size() - 1];
-
+						if (nodeType != "Static PC Controller") {
+							stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
+							ssNodeName << nodeName;
+							ssNodeId << nodeID;
+							ssNodeType << nodeType;
+							ssNodeZone << nodeZone;
+							ssNodeValue << nodeValue;
+							device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
+						}	
+					}
+					device = device.substr(0, device.size() - 1) + "\n";                           
+					printf("Sent Device List \n");
+					thread_sock << device;
+					break;
+				}
+				case Device:
+				{
+					if(v.size() != 5) {
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
+					
 					int Node = 0;
 					int Level = 0;
 					string Type = "";
@@ -494,9 +496,13 @@ void *process_commands(void* arg)
 					ssLevel << Level;
 					string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
 					thread_sock << result;
+					break;
 				}
-
-				if (command == "SETNODE" && v.size() == 4) {
+				case SetNode:
+				{
+					if(v.size() != 4) {
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
 					int Node = 0;
 					string NodeName = "";
 					string NodeZone = "";
@@ -520,11 +526,24 @@ void *process_commands(void* arg)
 					
 					//save details to XML
 					Manager::Get()->WriteConfig(g_homeId);
+					break;
 				}
+				default:
+					throw ProtocolException(1, "Unknown command");
+					break;
 			}
+		}
+		catch (ProtocolException& e) {
+			string what = "ProtocolException: ";
+			what += e.what();
+			what += "\n";
+			thread_sock << what;
 		}
 		catch (std::exception const& e) {
 			std::cout << "Exception: " << e.what() << endl;
+		}
+		catch (SocketException& e) {
+			std::cout << "SocketException: " << e.what() << endl;
 		}
 	}
 }
