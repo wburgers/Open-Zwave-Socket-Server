@@ -41,6 +41,12 @@
 #include "ValueStore.h"
 #include "Value.h"
 #include "ValueBool.h"
+#include "ValueByte.h"
+#include "ValueDecimal.h"
+#include "ValueInt.h"
+#include "ValueList.h"
+#include "ValueShort.h"
+#include "ValueString.h"
 
 #include "Socket.h"
 #include "SocketException.h"
@@ -54,16 +60,18 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "Main.h"
 using namespace OpenZWave;
 
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
 
 typedef struct {
-    uint32 m_homeId;
-    uint8 m_nodeId;
-    bool m_polled;
-    list<ValueID> m_values;
+	uint32			m_homeId;
+	uint8			m_nodeId;
+	//string			commandclass;
+	bool			m_polled;
+	list<ValueID>	m_values;
 } NodeInfo;
 
 // Value-Defintions of the different String values
@@ -82,23 +90,29 @@ void create_string_map()
 	s_mapStringValues["DEVICE"] = Device;
 	s_mapStringValues["SETNODE"] = SetNode;
 }
-	
+
+bool SetValue(int32 home, int32 node, int32 value, string& err_message);
+
 //-----------------------------------------------------------------------------
 // <GetNodeInfo>
 // Callback that is triggered when a value, group or node changes
 //-----------------------------------------------------------------------------
 
-NodeInfo* GetNodeInfo(Notification const* _notification) {
-    uint32 const homeId = _notification->GetHomeId();
-    uint8 const nodeId = _notification->GetNodeId();
-    for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-        NodeInfo* nodeInfo = *it;
-        if ((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId)) {
-            return nodeInfo;
-        }
-    }
+NodeInfo* GetNodeInfo(uint32 const homeId, uint8 const nodeId) {
+	for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+		NodeInfo* nodeInfo = *it;
+		if ((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId)) {
+			return nodeInfo;
+		}
+	}
 
-    return NULL;
+	return NULL;
+}
+
+NodeInfo* GetNodeInfo(Notification const* notification) {
+	uint32 const homeId = notification->GetHomeId();
+	uint8 const nodeId = notification->GetNodeId();
+	return GetNodeInfo( homeId, nodeId );
 }
 
 //-----------------------------------------------------------------------------
@@ -166,7 +180,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 			NodeInfo* nodeInfo = new NodeInfo();
 			nodeInfo->m_homeId = _notification->GetHomeId();
 			nodeInfo->m_nodeId = _notification->GetNodeId();
-			nodeInfo->m_polled = false;             
+			nodeInfo->m_polled = false;
 			g_nodes.push_back(nodeInfo);
 			break;
 		}
@@ -302,13 +316,13 @@ int main(int argc, char* argv[]) {
 
     pthread_mutex_lock(&initMutex);
 
-    // Create the OpenZWave Manager.
-    // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
-    // The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
-    // the log file will appear in the program's working directory.
-	//Options::Create("../../../../config/", "", "");
-    Options::Create("./config/", "", "");
-    Options::Get()->Lock();
+	// Create the OpenZWave Manager.
+	// The first argument is the path to the config files (where the manufacturer_specific.xml file is located
+	// The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
+	// the log file will appear in the program's working directory.
+	Options::Create("../../../../config/", "", "");
+	//Options::Create("./config/", "", "");
+	Options::Get()->Lock();
 
     Manager::Create();
 
@@ -453,49 +467,29 @@ void *process_commands(void* arg)
 				}
 				case Device:
 				{
-					if(v.size() != 5) {
+					if(v.size() != 4) {
 						throw ProtocolException(2, "Wrong number of arguments");
 					}
 					
 					int Node = 0;
 					int Level = 0;
-					string Type = "";
 					string Option = "";
+					string err_message = "";
 
 					Level = lexical_cast<int>(v[2].c_str());
 					Node = lexical_cast<int>(v[1].c_str());
-					Type = v[3].c_str();
-					Type = trim(Type);
-					Option=v[4].c_str();
-
-					if ((Type == "Multilevel Switch") || (Type == "Multilevel Power Switch")) {
-						pthread_mutex_lock(&g_criticalSection);
-						Manager::Get()->SetNodeLevel(g_homeId, Node, Level);
-						pthread_mutex_unlock(&g_criticalSection);
+					Option=v[3].c_str();
+					
+					if(!SetValue(g_homeId, Node, Level, err_message)){
+						thread_sock << err_message;
 					}
-
-					if (Type == "Binary Switch") {
-						pthread_mutex_lock(&g_criticalSection);
-						if (Level == 0) {
-							Manager::Get()->SetNodeOff(g_homeId, Node);
-						} else {
-							Manager::Get()->SetNodeOn(g_homeId, Node);
-						}
-						pthread_mutex_unlock(&g_criticalSection);
+					else{
+						stringstream ssNode, ssLevel;
+						ssNode << Node;
+						ssLevel << Level;
+						string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
+						thread_sock << result;
 					}
-					if (Type == "General Thermostat V2") {
-						pthread_mutex_lock(&g_criticalSection);
-						//hmm adding options and will evaluate commands based on int Level to start
-						//need to practice changing modes
-
-						pthread_mutex_unlock(&g_criticalSection);
-					}
-
-					stringstream ssNode, ssLevel;
-					ssNode << Node;
-					ssLevel << Level;
-					string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
-					thread_sock << result;
 					break;
 				}
 				case SetNode:
@@ -546,4 +540,111 @@ void *process_commands(void* arg)
 			std::cout << "SocketException: " << e.what() << endl;
 		}
 	}
+}
+
+bool SetValue(int32 home, int32 node, int32 value, string& err_message)
+{
+	err_message = "";
+	bool bool_value;
+	int int_value;
+	uint8 uint8_value;
+	uint16 uint16_value;
+	bool response;
+	bool cmdfound = false;
+	
+	if ( NodeInfo* nodeInfo = GetNodeInfo( home, node ) )
+	{
+		// Find the correct instance
+		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it )
+		{
+			int id = (*it).GetCommandClassId();
+			//int inst = (*it).GetInstance();
+			string label = Manager::Get()->GetValueLabel( (*it) );
+
+			switch ( id )
+			{
+				case COMMAND_CLASS_SWITCH_BINARY:
+				{
+					// label="Switch" is mandatory, else it isn't a switch
+					if ( label == "Switch" )
+					{
+						// If it is a binary CommandClass, then we only allow 0 (off) or 255 (on)
+						if ( value > 0 && value < 255 )
+						{
+							continue;
+						}
+					}
+
+					break;
+				}
+				case COMMAND_CLASS_SWITCH_MULTILEVEL:
+				{
+					// label="Level" is mandatory, else it isn't a dimmer type device
+					if ( label != "Level" )
+					{
+						continue;
+					}
+					break;
+				}
+				default:
+				{
+					continue;
+				}
+			}
+
+			if ( ValueID::ValueType_Bool == (*it).GetType() )
+			{
+				bool_value = (bool)value;
+				response = Manager::Get()->SetValue( *it, bool_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_Byte == (*it).GetType() )
+			{
+				uint8_value = (uint8)value;
+				response = Manager::Get()->SetValue( *it, uint8_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_Short == (*it).GetType() )
+			{
+				uint16_value = (uint16)value;
+				response = Manager::Get()->SetValue( *it, uint16_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_Int == (*it).GetType() )
+			{
+				int_value = value;
+				response = Manager::Get()->SetValue( *it, int_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_List == (*it).GetType() )
+			{
+				response = Manager::Get()->SetValue( *it, value );
+				cmdfound = true;
+			}
+			else
+			{
+				//WriteLog(LogLevel_Debug, false, "Return=false (unknown ValueType)");
+				err_message += "unknown ValueType | ";
+				return false;
+			}
+		}
+
+
+		if ( cmdfound == false )
+		{
+			//WriteLog( LogLevel_Debug, false, "Value=%d", value );
+			//WriteLog( LogLevel_Debug, false, "Error=Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL");
+			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL | ";
+			return false;
+		}
+
+	}
+	else
+	{
+		//WriteLog( LogLevel_Debug, false, "Return=false (node doesn't exist)" );
+		err_message += "node doesn't exist";
+		response = false;
+	}
+
+	return response;
 }
