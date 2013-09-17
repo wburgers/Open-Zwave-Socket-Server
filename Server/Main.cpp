@@ -41,9 +41,16 @@
 #include "ValueStore.h"
 #include "Value.h"
 #include "ValueBool.h"
+#include "ValueByte.h"
+#include "ValueDecimal.h"
+#include "ValueInt.h"
+#include "ValueList.h"
+#include "ValueShort.h"
+#include "ValueString.h"
 
 #include "Socket.h"
 #include "SocketException.h"
+#include "ProtocolException.h"
 #include <string>
 #include <iostream>
 #include <stdio.h>
@@ -53,16 +60,18 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "Main.h"
 using namespace OpenZWave;
 
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
 
 typedef struct {
-    uint32 m_homeId;
-    uint8 m_nodeId;
-    bool m_polled;
-    list<ValueID> m_values;
+	uint32			m_homeId;
+	uint8			m_nodeId;
+	//string			commandclass;
+	bool			m_polled;
+	list<ValueID>	m_values;
 } NodeInfo;
 
 // Value-Defintions of the different String values
@@ -72,22 +81,38 @@ static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
+enum Commands {Undefined = 0, AList, Device, SetNode};
+static std::map<std::string, Commands> s_mapStringValues;
+
+void create_string_map()
+{
+    s_mapStringValues["ALIST"] = AList;
+	s_mapStringValues["DEVICE"] = Device;
+	s_mapStringValues["SETNODE"] = SetNode;
+}
+
+bool SetValue(int32 home, int32 node, int32 value, string& err_message);
+
 //-----------------------------------------------------------------------------
 // <GetNodeInfo>
 // Callback that is triggered when a value, group or node changes
 //-----------------------------------------------------------------------------
 
-NodeInfo* GetNodeInfo(Notification const* _notification) {
-    uint32 const homeId = _notification->GetHomeId();
-    uint8 const nodeId = _notification->GetNodeId();
-    for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-        NodeInfo* nodeInfo = *it;
-        if ((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId)) {
-            return nodeInfo;
-        }
-    }
+NodeInfo* GetNodeInfo(uint32 const homeId, uint8 const nodeId) {
+	for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+		NodeInfo* nodeInfo = *it;
+		if ((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId)) {
+			return nodeInfo;
+		}
+	}
 
-    return NULL;
+	return NULL;
+}
+
+NodeInfo* GetNodeInfo(Notification const* notification) {
+	uint32 const homeId = notification->GetHomeId();
+	uint8 const nodeId = notification->GetNodeId();
+	return GetNodeInfo( homeId, nodeId );
 }
 
 //-----------------------------------------------------------------------------
@@ -155,7 +180,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 			NodeInfo* nodeInfo = new NodeInfo();
 			nodeInfo->m_homeId = _notification->GetHomeId();
 			nodeInfo->m_nodeId = _notification->GetNodeId();
-			nodeInfo->m_polled = false;             
+			nodeInfo->m_polled = false;
 			g_nodes.push_back(nodeInfo);
 			break;
 		}
@@ -252,9 +277,8 @@ void split(const string& s, char c, vector<string>& v) {
         v.push_back(s.substr(i, j - i));
         i = ++j;
         j = s.find(c, j);
-        if (j == string::npos)
-            v.push_back(s.substr(i, s.length()));
     }
+	v.push_back(s.substr(i, s.length()));
 }
 
 string trim(string s) {
@@ -292,13 +316,13 @@ int main(int argc, char* argv[]) {
 
     pthread_mutex_lock(&initMutex);
 
-    // Create the OpenZWave Manager.
-    // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
-    // The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
-    // the log file will appear in the program's working directory.
+	// Create the OpenZWave Manager.
+	// The first argument is the path to the config files (where the manufacturer_specific.xml file is located
+	// The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
+	// the log file will appear in the program's working directory.
 	Options::Create("../../../../config/", "", "");
-    //Options::Create("./config/", "./cpp/examples/linux/server", "");
-    Options::Get()->Lock();
+	//Options::Create("./config/", "", "");
+	Options::Get()->Lock();
 
     Manager::Create();
 
@@ -322,11 +346,12 @@ int main(int argc, char* argv[]) {
     pthread_cond_wait(&initCond, &initMutex);
 
     if (!g_initFailed) {
+	
+		create_string_map();
+		Manager::Get()->WriteConfig(g_homeId);
 
-        Manager::Get()->WriteConfig(g_homeId);
-
-        Driver::DriverData data;
-        Manager::Get()->GetDriverStatistics(g_homeId, &data);
+		Driver::DriverData data;
+		Manager::Get()->GetDriverStatistics(g_homeId, &data);
 
 		printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.m_SOFCnt, data.m_ACKWaiting, data.m_readAborts, data.m_badChecksum);
 		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
@@ -359,7 +384,7 @@ int main(int argc, char* argv[]) {
 				}
 			}
 			catch (SocketException& e) {
-				std::cout << "SocketException: " << e.description() << endl;
+				std::cout << "SocketException: " << e.what() << endl;
 			}
 			catch(...) {
 				std::cout << "Other exception" << endl;
@@ -370,13 +395,11 @@ int main(int argc, char* argv[]) {
     }
 
 	// program exit (clean up)
-	if(strcasecmp(port.c_str(), "usb") == 0)
-	{
-			Manager::Get()->RemoveDriver("HID Controller");
+	if(strcasecmp(port.c_str(), "usb") == 0) {
+		Manager::Get()->RemoveDriver("HID Controller");
 	}
-	else
-	{
-			Manager::Get()->RemoveDriver(port);
+	else {
+		Manager::Get()->RemoveDriver(port);
 	}
 	Manager::Get()->RemoveWatcher(OnNotification, NULL);
 	Manager::Destroy();
@@ -394,109 +417,86 @@ void *process_commands(void* arg)
 			//get commands from the socket
 			std::string data;
 			thread_sock >> data;
-			if(data.c_str() == ""){ //client closed the connection
+			if(strcmp(data.c_str(), "") == 0){ //client closed the connection
 				std::cout << "Client closed the connection" << endl;
 				return 0;
 			}
 			
-			//give list of devices
-			if (trim(data.c_str()) == "ALIST") {
-				string device;
-				for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-					NodeInfo* nodeInfo = *it;
-					int nodeID = nodeInfo->m_nodeId;
-					//This refreshed node could be cleaned up - I added the quick hack so I would get status
-					// or state changes that happened on the switch itself or due to another event / [rpcess
-					bool isRePolled= Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
-					string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
-					string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
-					string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
-					string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
-											//The point of this was to help me figure out what the node values looked like
-					for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
-						string tempstr="";
-						Manager::Get()->GetValueAsString(*it5,&tempstr);                   
-						tempstr= "="+tempstr;
-						//hack to delimit values .. need to properly escape all values
-						nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
-					}
-
-					if (nodeName.size() == 0) nodeName = "Undefined";
-
-					if (nodeType != "Static PC Controller") {
-						stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
-						ssNodeName << nodeName;
-						ssNodeId << nodeID;
-						ssNodeType << nodeType;
-						ssNodeZone << nodeZone;
-						ssNodeValue << nodeValue;
-						device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
-					}
-					
-				}
-				device = device.substr(0, device.size() - 1) + "\n";                           
-				printf("Sent Device List \n");
-				thread_sock << device;
-			}
-
 			vector<string> v;
 			split(data, '~', v);
+			switch (s_mapStringValues[trim(v[0].c_str())])
+			{
+				case AList:
+				{
+					string device;
+					for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+						NodeInfo* nodeInfo = *it;
+						int nodeID = nodeInfo->m_nodeId;
+						//This refreshed node could be cleaned up - I added the quick hack so I would get status
+						// or state changes that happened on the switch itself or due to another event / [rpcess
+						bool isRePolled= Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
+						string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+						string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
+						string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
+						string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
+												//The point of this was to help me figure out what the node values looked like
+						for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
+							string tempstr="";
+							Manager::Get()->GetValueAsString(*it5,&tempstr);                   
+							tempstr= "="+tempstr;
+							//hack to delimit values .. need to properly escape all values
+							nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
+						}
 
-			string command, deviceType;
+						if (nodeName.size() == 0) nodeName = "Undefined";
 
-			if (v.size() > 0) {
-				//check Type of Command
-				stringstream sCommand;
-				sCommand << v[0].c_str();
-				string command = sCommand.str();
-				
-				printf("Command: %s\n", command.c_str());
-				if (command == "DEVICE" && v.size() == 5) {
-					//check type
-					//deviceType = v[v.size() - 1];
-
+						if (nodeType != "Static PC Controller") {
+							stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
+							ssNodeName << nodeName;
+							ssNodeId << nodeID;
+							ssNodeType << nodeType;
+							ssNodeZone << nodeZone;
+							ssNodeValue << nodeValue;
+							device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
+						}	
+					}
+					device = device.substr(0, device.size() - 1) + "\n";                           
+					printf("Sent Device List \n");
+					thread_sock << device;
+					break;
+				}
+				case Device:
+				{
+					if(v.size() != 4) {
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
+					
 					int Node = 0;
 					int Level = 0;
-					string Type = "";
 					string Option = "";
+					string err_message = "";
 
 					Level = lexical_cast<int>(v[2].c_str());
 					Node = lexical_cast<int>(v[1].c_str());
-					Type = v[3].c_str();
-					Type = trim(Type);
-					Option=v[4].c_str();
-
-					if ((Type == "Multilevel Switch") || (Type == "Multilevel Power Switch")) {
-						pthread_mutex_lock(&g_criticalSection);
-						Manager::Get()->SetNodeLevel(g_homeId, Node, Level);
-						pthread_mutex_unlock(&g_criticalSection);
+					Option=v[3].c_str();
+					
+					if(!SetValue(g_homeId, Node, Level, err_message)){
+						thread_sock << err_message;
 					}
-
-					if (Type == "Binary Switch") {
-						pthread_mutex_lock(&g_criticalSection);
-						if (Level == 0) {
-							Manager::Get()->SetNodeOff(g_homeId, Node);
-						} else {
-							Manager::Get()->SetNodeOn(g_homeId, Node);
-						}
-						pthread_mutex_unlock(&g_criticalSection);
+					else{
+						stringstream ssNode, ssLevel;
+						ssNode << Node;
+						ssLevel << Level;
+						string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
+						thread_sock << result;
 					}
-					if (Type == "General Thermostat V2") {
-						pthread_mutex_lock(&g_criticalSection);
-						//hmm adding options and will evaluate commands based on int Level to start
-						//need to practice changing modes
-
-						pthread_mutex_unlock(&g_criticalSection);
-					}
-
-					stringstream ssNode, ssLevel;
-					ssNode << Node;
-					ssLevel << Level;
-					string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
-					thread_sock << result;
+					break;
 				}
-
-				if (command == "SETNODE" && v.size() == 4) {
+				case SetNode:
+				{
+					if(v.size() != 4) {
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
 					int Node = 0;
 					string NodeName = "";
 					string NodeZone = "";
@@ -520,11 +520,131 @@ void *process_commands(void* arg)
 					
 					//save details to XML
 					Manager::Get()->WriteConfig(g_homeId);
+					break;
 				}
+				default:
+					throw ProtocolException(1, "Unknown command");
+					break;
 			}
+		}
+		catch (ProtocolException& e) {
+			string what = "ProtocolException: ";
+			what += e.what();
+			what += "\n";
+			thread_sock << what;
 		}
 		catch (std::exception const& e) {
 			std::cout << "Exception: " << e.what() << endl;
 		}
+		catch (SocketException& e) {
+			std::cout << "SocketException: " << e.what() << endl;
+		}
 	}
+}
+
+bool SetValue(int32 home, int32 node, int32 value, string& err_message)
+{
+	err_message = "";
+	bool bool_value;
+	int int_value;
+	uint8 uint8_value;
+	uint16 uint16_value;
+	bool response;
+	bool cmdfound = false;
+	
+	if ( NodeInfo* nodeInfo = GetNodeInfo( home, node ) )
+	{
+		// Find the correct instance
+		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it )
+		{
+			int id = (*it).GetCommandClassId();
+			//int inst = (*it).GetInstance();
+			string label = Manager::Get()->GetValueLabel( (*it) );
+
+			switch ( id )
+			{
+				case COMMAND_CLASS_SWITCH_BINARY:
+				{
+					// label="Switch" is mandatory, else it isn't a switch
+					if ( label == "Switch" )
+					{
+						// If it is a binary CommandClass, then we only allow 0 (off) or 255 (on)
+						if ( value > 0 && value < 255 )
+						{
+							continue;
+						}
+					}
+
+					break;
+				}
+				case COMMAND_CLASS_SWITCH_MULTILEVEL:
+				{
+					// label="Level" is mandatory, else it isn't a dimmer type device
+					if ( label != "Level" )
+					{
+						continue;
+					}
+					break;
+				}
+				default:
+				{
+					continue;
+				}
+			}
+
+			if ( ValueID::ValueType_Bool == (*it).GetType() )
+			{
+				bool_value = (bool)value;
+				response = Manager::Get()->SetValue( *it, bool_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_Byte == (*it).GetType() )
+			{
+				uint8_value = (uint8)value;
+				response = Manager::Get()->SetValue( *it, uint8_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_Short == (*it).GetType() )
+			{
+				uint16_value = (uint16)value;
+				response = Manager::Get()->SetValue( *it, uint16_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_Int == (*it).GetType() )
+			{
+				int_value = value;
+				response = Manager::Get()->SetValue( *it, int_value );
+				cmdfound = true;
+			}
+			else if ( ValueID::ValueType_List == (*it).GetType() )
+			{
+				response = Manager::Get()->SetValue( *it, value );
+				cmdfound = true;
+			}
+			else
+			{
+				//WriteLog(LogLevel_Debug, false, "Return=false (unknown ValueType)");
+				err_message += "unknown ValueType | ";
+				return false;
+			}
+		}
+
+
+		if ( cmdfound == false )
+		{
+			//WriteLog( LogLevel_Debug, false, "Value=%d", value );
+			//WriteLog( LogLevel_Debug, false, "Error=Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL");
+			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL | ";
+			return false;
+		}
+
+	}
+	else
+	{
+		//WriteLog( LogLevel_Debug, false, "Return=false (node doesn't exist)" );
+		err_message += "node doesn't exist";
+		response = false;
+	}
+
+	return response;
 }
