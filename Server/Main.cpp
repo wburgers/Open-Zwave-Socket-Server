@@ -380,6 +380,7 @@ int main(int argc, char* argv[]) {
 				Socket new_sock;
 				while(server.accept(new_sock)) {
 					pthread_t thread;
+					//segmentation fault here
 					int *thread_sock;
 					*thread_sock = new_sock.GetSock();
 					
