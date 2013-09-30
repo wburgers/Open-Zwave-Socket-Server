@@ -36,6 +36,7 @@
 #include "Manager.h"
 #include "Driver.h"
 #include "Node.h"
+#include "Scene.h"
 #include "Group.h"
 #include "Notification.h"
 #include "ValueStore.h"
@@ -81,7 +82,7 @@ static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
-enum Commands {Undefined = 0, AList, Device, SetNode};
+enum Commands {Undefined = 0, AList, Device, SetNode, SceneC, Create, Add, Activate, Test};
 static std::map<std::string, Commands> s_mapStringValues;
 
 void create_string_map()
@@ -89,6 +90,11 @@ void create_string_map()
     s_mapStringValues["ALIST"] = AList;
 	s_mapStringValues["DEVICE"] = Device;
 	s_mapStringValues["SETNODE"] = SetNode;
+	s_mapStringValues["SCENE"] = SceneC;
+	s_mapStringValues["CREATE"] = Create;
+	s_mapStringValues["ADD"] = Add;
+	s_mapStringValues["ACTIVATE"] = Activate;
+	s_mapStringValues["TEST"] = Test;
 }
 
 bool SetValue(int32 home, int32 node, int32 value, string& err_message);
@@ -320,8 +326,8 @@ int main(int argc, char* argv[]) {
 	// The first argument is the path to the config files (where the manufacturer_specific.xml file is located
 	// The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
 	// the log file will appear in the program's working directory.
-	Options::Create("../../../../config/", "", "");
-	//Options::Create("./config/", "", "");
+	//Options::Create("../../../../config/", "", "");
+	Options::Create("./config/", "", "");
 	Options::Get()->Lock();
 
     Manager::Create();
@@ -424,6 +430,7 @@ void *process_commands(void* arg)
 			
 			vector<string> v;
 			split(data, '~', v);
+			string result = "";
 			switch (s_mapStringValues[trim(v[0].c_str())])
 			{
 				case AList:
@@ -434,7 +441,7 @@ void *process_commands(void* arg)
 						int nodeID = nodeInfo->m_nodeId;
 						//This refreshed node could be cleaned up - I added the quick hack so I would get status
 						// or state changes that happened on the switch itself or due to another event / [rpcess
-						bool isRePolled= Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
+						bool isRePolled = Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
 						string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
 						string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
 						string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
@@ -487,7 +494,7 @@ void *process_commands(void* arg)
 						stringstream ssNode, ssLevel;
 						ssNode << Node;
 						ssLevel << Level;
-						string result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
+						result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
 						thread_sock << result;
 					}
 					break;
@@ -515,11 +522,118 @@ void *process_commands(void* arg)
 					ssNode << Node;
 					ssName << NodeName;
 					ssZone << NodeZone;
-					string result = "MSG~ZWave Name set Node=" + ssNode.str() + " Name=" + ssName.str() + " Zone=" + ssZone.str() + "\n";
+					result = "MSG~ZWave Name set Node=" + ssNode.str() + " Name=" + ssName.str() + " Zone=" + ssZone.str() + "\n";
 					thread_sock << result;
 					
 					//save details to XML
 					Manager::Get()->WriteConfig(g_homeId);
+					break;
+				}
+				case SceneC:
+				{
+					if(v.size() < 3){
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
+					switch(s_mapStringValues[trim(v[1].c_str())])
+					{
+						case Create:
+						{
+							string sclabel = trim(v[2].c_str());
+							if(int scid = Manager::Get()->CreateScene())
+							{
+								Manager::Get()->SetSceneLabel(scid, sclabel);
+							}
+							result = "Scene created with name " + sclabel +"\n";
+							thread_sock << result;
+							break;
+						}
+						case Add:
+						{
+							uint8 numscenes = Manager::Get()->GetNumScenes();
+							uint8 *sceneIds = new uint8[numscenes];
+							
+							if(Manager::Get()->GetAllScenes(&sceneIds)==NULL) {
+								throw ProtocolException(3, "No scenes created");
+							}
+							
+							result = "hoi";
+							thread_sock << result;
+							
+							string sclabel = trim(v[2].c_str());
+							int scid=0;
+							int Node = lexical_cast<int>(v[3].c_str());
+							int Level = lexical_cast<int>(v[4].c_str());
+							
+							for(int i=1; i<=numscenes; ++i){
+								scid = sceneIds[i];
+								if(sclabel == Manager::Get()->GetSceneLabel(scid)){
+									continue;
+								}
+								result = "Found right scene\n";
+								thread_sock << result;
+								NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
+								for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+									int id = (*vit).GetCommandClassId();
+									string vlabel = Manager::Get()->GetValueLabel( (*vit) );
+								
+									if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
+										continue;
+									}
+									result = "Add valueid/value to scene\n";
+									thread_sock << result;
+									Manager::Get()->AddSceneValue(scid, (*vit), Level);
+								}
+							}
+							break;
+						}
+						case Activate:
+						{
+							uint8 numscenes = Manager::Get()->GetNumScenes();
+							uint8 *sceneIds = new uint8[numscenes];
+							
+							if(Manager::Get()->GetAllScenes(&sceneIds)==NULL) {
+								throw ProtocolException(3, "No scenes created");
+							}
+							
+							string sclabel = trim(v[2].c_str());
+							int scid=0;
+							
+							for(int i=1; i<=numscenes; ++i){
+								scid = sceneIds[i];
+								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+									continue;
+								}
+								result = "Activate scene "+sclabel+"\n";
+								thread_sock << result;
+								Manager::Get()->ActivateScene(scid);
+							}
+							break;
+						}
+						default:
+						throw ProtocolException(1, "Unknown Scene command");
+						break;
+					}
+					break;
+				}
+				case Test:
+				{
+					if(int scid = Manager::Get()->CreateScene())
+					{
+						for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+							NodeInfo* nodeInfo = *it;
+							for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+								int id = (*vit).GetCommandClassId();
+								string label = Manager::Get()->GetValueLabel( (*vit) );
+								
+								if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || label != "Level") {
+									continue;
+								}
+								
+								Manager::Get()->AddSceneValue(scid, (*vit), 0);
+							}
+						}
+						Manager::Get()->ActivateScene(scid);
+					}
 					break;
 				}
 				default:
