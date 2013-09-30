@@ -381,6 +381,11 @@ int main(int argc, char* argv[]) {
 					{
 						throw std::runtime_error("Unable to create thread");
 					}
+					else
+					{
+						std::cout<< "Connection Created" << endl;
+						
+					}
 				}
 			}
 			catch (SocketException& e) {
@@ -393,8 +398,10 @@ int main(int argc, char* argv[]) {
 			std::cin.ignore();
 		}
     }
-
+	
 	// program exit (clean up)
+	std::cout << "Closing connection to Zwave Controller" << endl;
+	
 	if(strcasecmp(port.c_str(), "usb") == 0) {
 		Manager::Get()->RemoveDriver("HID Controller");
 	}
