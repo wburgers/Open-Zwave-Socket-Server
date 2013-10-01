@@ -43,7 +43,7 @@ test: Main.o Socket.o lib
 	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o -pthread -ludev
 
 clean:
-	rm -f test Main.o
+	rm -f test Main.o Socket.o
 
 XMLLINT := $(shell whereis -b xmllint | cut -c10-)
 
