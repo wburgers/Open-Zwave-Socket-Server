@@ -461,7 +461,7 @@ void *process_commands(void* arg)
 
 						if (nodeName.size() == 0) nodeName = "Undefined";
 
-						if (nodeType != "Static PC Controller"  && nodeType != '') {
+						if (nodeType != "Static PC Controller"  && nodeType != "") {
 							stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
 							ssNodeName << nodeName;
 							ssNodeId << nodeID;
@@ -478,9 +478,10 @@ void *process_commands(void* arg)
 				}
 				case Device:
 				{
-				    std::cout << v.size() << endl;
+
 					if(v.size() != 4) {
 					//	throw ProtocolException(2, "Wrong number of arguments");
+					std::cout << v.size() << endl;
 					}
 					
 					int Node = 0;
