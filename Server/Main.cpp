@@ -541,22 +541,26 @@ void *process_commands(void* arg)
 							string sclabel = trim(v[2].c_str());
 							if(int scid = Manager::Get()->CreateScene())
 							{
+								stringstream ssID;
+								ssID << scid;
 								Manager::Get()->SetSceneLabel(scid, sclabel);
+								result = "Scene created with name " + sclabel +" and scene_id " + ssID.str() + "\n";
 							}
-							result = "Scene created with name " + sclabel +"\n";
 							thread_sock << result;
 							break;
 						}
 						case Add:
 						{
-							uint8 numscenes = Manager::Get()->GetNumScenes();
+							uint8 numscenes = 0;
 							uint8 *sceneIds = new uint8[numscenes];
 							
-							if(Manager::Get()->GetAllScenes(&sceneIds)==NULL) {
+							if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
 								throw ProtocolException(3, "No scenes created");
 							}
 							
-							result = "hoi";
+							stringstream ssNum;
+							ssNum << numscenes;
+							result = "numscenes " + ssNum.str() + "\n";
 							thread_sock << result;
 							
 							string sclabel = trim(v[2].c_str());
@@ -564,9 +568,13 @@ void *process_commands(void* arg)
 							int Node = lexical_cast<int>(v[3].c_str());
 							int Level = lexical_cast<int>(v[4].c_str());
 							
-							for(int i=1; i<=numscenes; ++i){
+							for(int i=0; i<numscenes; ++i){
 								scid = sceneIds[i];
-								if(sclabel == Manager::Get()->GetSceneLabel(scid)){
+								stringstream ssID;
+								ssID << scid;
+								result = "scid " + ssID.str() + "\n";
+								thread_sock << result;
+								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
 									continue;
 								}
 								result = "Found right scene\n";
@@ -588,17 +596,17 @@ void *process_commands(void* arg)
 						}
 						case Activate:
 						{
-							uint8 numscenes = Manager::Get()->GetNumScenes();
+							uint8 numscenes = 0;
 							uint8 *sceneIds = new uint8[numscenes];
 							
-							if(Manager::Get()->GetAllScenes(&sceneIds)==NULL) {
+							if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
 								throw ProtocolException(3, "No scenes created");
 							}
 							
 							string sclabel = trim(v[2].c_str());
 							int scid=0;
 							
-							for(int i=1; i<=numscenes; ++i){
+							for(int i=0; i<numscenes; ++i){
 								scid = sceneIds[i];
 								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
 									continue;
