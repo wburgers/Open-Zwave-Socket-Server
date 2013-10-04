@@ -62,17 +62,17 @@ function getDevices()
                         $devices[$c]['status']='On';
                 }
 
-            if($device[4]=='Multilevel Power Switch')
-            {
-                $temp=explode(' Basic=',$device[5]);
-                $temp= explode(' ',$temp[1]);
-                $devices[$c]['status']=$temp[0];
-            }
-                $c++;
-                }
+        if($device[4]=='Multilevel Power Switch')
+        {
+            $temp=explode('<>Level=',$device[5]);
+            $temp= explode('<>',$temp[1]);
+            $devices[$c]['status']=trim($temp[0]);
+        }
+        $c++;
+    }
 
     //var_dump($devices);
-        return $devices;
+    return $devices;
 }
 $devices=getDevices();
 sleep(1);
@@ -87,33 +87,34 @@ if($node=filter_input(INPUT_POST,'node_node',FILTER_VALIDATE_INT))
     //
     if($_POST['node_type']=='Multilevel Power Switch')
     {
-		//clicked down
-		if($_POST['submit_y']>=66  && $devices[$node-2]['status']==$_POST['node_status'])
-		{	
-			
-			if($_POST['node_status'] - 5 < 0)
-			{
-				$_POST['node_status']=0;
-			}
-			else
-			{
-				$_POST['node_status']-=5;
-			}
-		}
-		//clicked up
-		if($_POST['submit_y']<=67  && $devices[$node-2]['status']==$_POST['node_status'])
-		{
-			if($_POST['node_status'] + 5 > 99)
-			{
-				$_POST['node_status']=99;
-			}
-			else
-			{
-				$_POST['node_status']+=5;
-			}
-		}
-		
-      $msg= "DEVICE~$node~". $_POST['node_status'] . "~". $_POST['node_type'];
+        //clicked down
+        if($_POST['submit_y']>=66)//  && $devices[$node-2]['status']==$_POST['node_status'])
+        {
+
+            if($_POST['node_status'] - 5 < 0)
+            {
+                $_POST['node_status']=0;
+            }
+            else
+            {
+                $_POST['node_status']-=5;
+            }
+        }
+        //clicked up
+        if($_POST['submit_y']<=67  )//&& $devices[$node-2]['status']==$_POST['node_status'])
+        {
+            if($_POST['node_status'] + 5 > 99)
+            {
+                $_POST['node_status']=99;
+            }
+            else
+            {
+                $_POST['node_status']+=5;
+            }
+        }
+
+
+        $msg= "DEVICE~$node~". $_POST['node_status'] . "~". $_POST['node_type'];
         
     }
     if($_POST['node_type']=='Binary Power Switch' || $_POST['node_type']=='Binary Switch')
