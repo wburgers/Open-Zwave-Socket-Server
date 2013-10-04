@@ -53,68 +53,29 @@ function getDevices()
             {
                          $devices[$c]['status']='Off';
             }
-		if(strpos($device[5],'Switch=False')!==false)
-		{
-			$devices[$c]['status']='Off';
-		}
-	if(strpos($device[5],'Switch=True')!==false)
-                {
-                        $devices[$c]['status']='On';
+            if($device[4]=='Multilevel Power Switch')
+            {
+                $temp=explode(' Basic=',$device[5]);
+                $temp= explode(' ',$temp[1]);
+                $devices[$c]['status']=$temp[0];
+            }
+                $c++;
                 }
 
-        if($device[4]=='Multilevel Power Switch')
-        {
-            $temp=explode('<>Level=',$device[5]);
-            $temp= explode('<>',$temp[1]);
-            $devices[$c]['status']=trim($temp[0]);
-        }
-        $c++;
-    }
-
     //var_dump($devices);
-    return $devices;
+        return $devices;
 }
 $devices=getDevices();
-sleep(1);
 
 if($node=filter_input(INPUT_POST,'node_node',FILTER_VALIDATE_INT))
 {
-
-//die(nl2br(print_r($_POST,true)));
 
     //DEVICE~2~255~Binary Switch
     //SETNODE~2~TESTLAMP~1
     //
     if($_POST['node_type']=='Multilevel Power Switch')
     {
-        //clicked down
-        if($_POST['submit_y']>=66)//  && $devices[$node-2]['status']==$_POST['node_status'])
-        {
-
-            if($_POST['node_status'] - 5 < 0)
-            {
-                $_POST['node_status']=0;
-            }
-            else
-            {
-                $_POST['node_status']-=5;
-            }
-        }
-        //clicked up
-        if($_POST['submit_y']<=67  )//&& $devices[$node-2]['status']==$_POST['node_status'])
-        {
-            if($_POST['node_status'] + 5 > 99)
-            {
-                $_POST['node_status']=99;
-            }
-            else
-            {
-                $_POST['node_status']+=5;
-            }
-        }
-
-
-        $msg= "DEVICE~$node~". $_POST['node_status'] . "~". $_POST['node_type'];
+      $msg= "DEVICE~$node~". $_POST['node_status'] . "~". $_POST['node_type'];
         
     }
     if($_POST['node_type']=='Binary Power Switch' || $_POST['node_type']=='Binary Switch')
@@ -140,8 +101,7 @@ if($node=filter_input(INPUT_POST,'node_node',FILTER_VALIDATE_INT))
     }
     //sleep(2);// likes it
     //$devices=getDevices();
-    header('Location: ./sleep.php');
-	exit();
+    header('Location: /');
 }
 
 ///////////spit out template
@@ -177,7 +137,7 @@ if($node=filter_input(INPUT_POST,'node_node',FILTER_VALIDATE_INT))
     }
 </style>
     <title>Lights</title>
-    <link rel="apple-touch-icon" href="./lights.png"/>
+    <link rel="apple-touch-icon" href="/lights.png"/>
     </head>
     <body>
 <div id="content" style="width:auto;margin:auto; padding:5px;">
@@ -185,29 +145,14 @@ if($node=filter_input(INPUT_POST,'node_node',FILTER_VALIDATE_INT))
 foreach($devices as $device)
 {
 
-    echo "<div class='node'><form method='post'><div class='pictureframe'><input type='image' width='100px' height='133px' src='images/";
-	//horrible hack 
-if($device['type']=='Multilevel Power Switch')
-{
-	echo 'multi'; 
-}
-else
-{	
-	if(strtolower($device['status'])=='on' || $device['status'] >0)
-	{
-		echo 'on';
-	} 
-	else
-		echo 'off';
-}
-echo ".png' border='0' style='margin:2px;' name='submit'></div>
+    echo "<div class='node'><form method='post'><div class='pictureframe'><input type='image' width='100px' height='133px' src='images/node_" . $device['node'] . "_" . strtolower($device['status']) .".jpg' border='0' style='margin:2px;'></div>
     <div class='field_container'><label>Name:</label><input type='text' name='node_name' value='" . $device['name'] . "'></div>
-     <div class='field_container'><label>Type:</label><input type='text' name='node_type' value='" . $device['type'] . "'></div>
+     <div class='field_container'><label>Type:</label><input type='text' name='node_type' value='" . $device['type'] . "' disabled></div>
         <div class='field_container'><label>Group:</label><input type='text' name='node_group' value='" . $device['group'] . "'></div>
 
     <div class='field_container'><label>Status: </label>";
     
-    //horrible hack part 2
+    //horrible hack
     if($device['type']=='Multilevel Power Switch')
     {
         
