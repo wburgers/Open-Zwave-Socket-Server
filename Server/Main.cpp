@@ -433,7 +433,7 @@ void *process_commands(void* arg)
 			//get commands from the socket
 			std::string data;
 			thread_sock >> data;
-			std::cout << data << endl;
+			//std::cout << data << endl;
 			if(strcmp(data.c_str(), "") == 0){ //client closed the connection
 				std::cout << "Client closed the connection" << endl;
 				return 0;
@@ -487,8 +487,7 @@ void *process_commands(void* arg)
 				{
 
 					if(v.size() != 4) {
-					//	throw ProtocolException(2, "Wrong number of arguments");
-					std::cout << v.size() << endl;
+						throw ProtocolException(2, "Wrong number of arguments");
 					}
 					
 					int Node = 0;
@@ -515,7 +514,7 @@ void *process_commands(void* arg)
 				case SetNode:
 				{
 					if(v.size() != 4) {
-					//	throw ProtocolException(2, "Wrong number of arguments");
+						throw ProtocolException(2, "Wrong number of arguments");
 					}
 					int Node = 0;
 					string NodeName = "";
