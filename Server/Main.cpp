@@ -559,6 +559,7 @@ void *process_commands(void* arg)
 								result = "Scene created with name " + sclabel +" and scene_id " + ssID.str() + "\n";
 							}
 							thread_sock << result;
+							Manager::Get()->WriteConfig(g_homeId);
 							break;
 						}
 						case Add:
@@ -604,6 +605,7 @@ void *process_commands(void* arg)
 									Manager::Get()->AddSceneValue(scid, (*vit), Level);
 								}
 							}
+							Manager::Get()->WriteConfig(g_homeId);
 							break;
 						}
 						case Activate:
