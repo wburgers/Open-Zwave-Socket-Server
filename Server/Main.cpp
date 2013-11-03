@@ -52,6 +52,8 @@
 #include "Socket.h"
 #include "SocketException.h"
 #include "ProtocolException.h"
+#include "sunrise.h"
+#include <time.h>
 #include <string>
 #include <iostream>
 #include <stdio.h>
@@ -82,7 +84,7 @@ static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
-enum Commands {Undefined = 0, AList, Device, SetNode, SceneC, Create, Add, Activate, Test};
+enum Commands {Undefined = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Test};
 static std::map<std::string, Commands> s_mapStringValues;
 
 void create_string_map()
@@ -93,6 +95,7 @@ void create_string_map()
 	s_mapStringValues["SCENE"] = SceneC;
 	s_mapStringValues["CREATE"] = Create;
 	s_mapStringValues["ADD"] = Add;
+	s_mapStringValues["REMOVE"] = Remove;
 	s_mapStringValues["ACTIVATE"] = Activate;
 	s_mapStringValues["TEST"] = Test;
 }
@@ -608,6 +611,51 @@ void *process_commands(void* arg)
 							Manager::Get()->WriteConfig(g_homeId);
 							break;
 						}
+						case Remove:
+						{
+							uint8 numscenes = 0;
+							uint8 *sceneIds = new uint8[numscenes];
+							
+							if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+								throw ProtocolException(3, "No scenes created");
+							}
+							
+							stringstream ssNum;
+							ssNum << numscenes;
+							result = "numscenes " + ssNum.str() + "\n";
+							thread_sock << result;
+							
+							string sclabel = trim(v[2].c_str());
+							int scid=0;
+							int Node = lexical_cast<int>(v[3].c_str());
+							
+							for(int i=0; i<numscenes; ++i){
+								scid = sceneIds[i];
+								stringstream ssID;
+								ssID << scid;
+								result = "scid " + ssID.str() + "\n";
+								thread_sock << result;
+								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+									continue;
+								}
+								result = "Found right scene\n";
+								thread_sock << result;
+								NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
+								for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+									int id = (*vit).GetCommandClassId();
+									string vlabel = Manager::Get()->GetValueLabel( (*vit) );
+								
+									if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
+										continue;
+									}
+									result = "Remove valueid from scene\n";
+									thread_sock << result;
+									Manager::Get()->RemoveSceneValue(scid, (*vit));
+								}
+							}
+							Manager::Get()->WriteConfig(g_homeId);
+							break;
+						}
 						case Activate:
 						{
 							uint8 numscenes = 0;
@@ -639,22 +687,17 @@ void *process_commands(void* arg)
 				}
 				case Test:
 				{
-					if(int scid = Manager::Get()->CreateScene())
-					{
-						for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-							NodeInfo* nodeInfo = *it;
-							for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
-								int id = (*vit).GetCommandClassId();
-								string label = Manager::Get()->GetValueLabel( (*vit) );
-								
-								if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || label != "Level") {
-									continue;
-								}
-								
-								Manager::Get()->AddSceneValue(scid, (*vit), 0);
-							}
-						}
-						Manager::Get()->ActivateScene(scid);
+					time_t sunrise, sunset;
+					float lat = 56.84672;
+					float lon = 7.8457018;
+					if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
+						stringstream ssSunrise;
+						ssSunrise << ctime(&sunrise);
+						stringstream ssSunset;
+						ssSunset << ctime(&sunset);
+						result = "sunrise @ " + ssSunrise.str();
+						result += "sunset @ " + ssSunset.str();
+						thread_sock << result;
 					}
 					break;
 				}
