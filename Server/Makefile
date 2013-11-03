@@ -39,8 +39,11 @@ lib:
 Socket: Socket.o
 	$(LD) -o Socket.o Socket.cpp
 
+Sunrise: Sunrise.o
+	$(LD) -c -Wall sunrise.cpp -o Sunrise.o -lm
+
 test: Main.o Socket.o lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o -pthread -ludev
+	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o -pthread -ludev
 
 clean:
 	rm -f test Main.o Socket.o
