@@ -53,6 +53,8 @@
 #include "SocketException.h"
 #include "ProtocolException.h"
 #include "sunrise.h"
+#include "Configuration.h"
+
 #include <time.h>
 #include <string>
 #include <iostream>
@@ -60,7 +62,6 @@
 #include <vector>
 #include <stdlib.h>
 #include <sstream>
-#include <iostream>
 #include <stdexcept>
 
 #include "Main.h"
@@ -567,6 +568,9 @@ void *process_commands(void* arg)
 						}
 						case Add:
 						{
+							if(v.size() != 5){
+								throw ProtocolException(2, "Wrong number of arguments");
+							}
 							uint8 numscenes = 0;
 							uint8 *sceneIds = new uint8[numscenes];
 							
@@ -613,6 +617,9 @@ void *process_commands(void* arg)
 						}
 						case Remove:
 						{
+							if(v.size() != 4){
+								throw ProtocolException(2, "Wrong number of arguments");
+							}
 							uint8 numscenes = 0;
 							uint8 *sceneIds = new uint8[numscenes];
 							
@@ -687,9 +694,11 @@ void *process_commands(void* arg)
 				}
 				case Test:
 				{
+					float lat, lon;
 					time_t sunrise, sunset;
-					float lat = 56.84672;
-					float lon = 7.8457018;
+					Configuration conf;
+					conf.GetLocation(lat, lon);
+					std::cout << "lat " << lat << "\n" << "lon " << lon << std::endl;
 					if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
 						stringstream ssSunrise;
 						ssSunrise << ctime(&sunrise);
