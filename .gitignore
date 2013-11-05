@@ -3,6 +3,7 @@ test
 OZW_log.txt
 make_log.txt
 zw*.xml
+*/*.ini
 .DS_Store
 .idea/.name
 .idea/encodings.xml
