@@ -5,8 +5,8 @@
 
 class Configuration {
 	private:
+		std::string conf_ini_location;
 		float lat, lon;
-		std::string conf_ini_location = "./cpp/examples/linux/server/Config.ini";
 		bool open_filestream(std::ifstream& conffile);
 		bool parse_filestream(std::ifstream& conffile);
 		bool parse_variable(std::string name, std::string value);

@@ -69,6 +69,9 @@ using namespace OpenZWave;
 
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
+static bool atHome = true;
+static time_t sunrise = 0, sunset = 0;
+static string dayScene = "", nightScene = "", awayScene = "";
 
 typedef struct {
 	uint32			m_homeId;
@@ -85,7 +88,7 @@ static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
-enum Commands {Undefined = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Test};
+enum Commands {Undefined = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Test};
 static std::map<std::string, Commands> s_mapStringValues;
 
 void create_string_map()
@@ -98,10 +101,12 @@ void create_string_map()
 	s_mapStringValues["ADD"] = Add;
 	s_mapStringValues["REMOVE"] = Remove;
 	s_mapStringValues["ACTIVATE"] = Activate;
+	s_mapStringValues["CRON"] = Cron;
 	s_mapStringValues["TEST"] = Test;
 }
 
 bool SetValue(int32 home, int32 node, int32 value, string& err_message);
+string activateScene(string sclabel);
 
 //-----------------------------------------------------------------------------
 // <GetNodeInfo>
@@ -665,25 +670,8 @@ void *process_commands(void* arg)
 						}
 						case Activate:
 						{
-							uint8 numscenes = 0;
-							uint8 *sceneIds = new uint8[numscenes];
-							
-							if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-								throw ProtocolException(3, "No scenes created");
-							}
-							
-							string sclabel = trim(v[2].c_str());
-							int scid=0;
-							
-							for(int i=0; i<numscenes; ++i){
-								scid = sceneIds[i];
-								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
-									continue;
-								}
-								result = "Activate scene "+sclabel+"\n";
-								thread_sock << result;
-								Manager::Get()->ActivateScene(scid);
-							}
+							string result = activateScene(trim(v[2].c_str()));
+							thread_sock << result;
 							break;
 						}
 						default:
@@ -692,13 +680,15 @@ void *process_commands(void* arg)
 					}
 					break;
 				}
-				case Test:
+				case Cron:
 				{
+					//planning to add a google calendar add-in here.
+					//right now it will just update the sunrise and sunset times for today
+					//call zcron.sh from cron to enable this function
+					
+					static Configuration conf; // need to find a better solution for this
 					float lat, lon;
-					time_t sunrise, sunset;
-					Configuration conf;
 					conf.GetLocation(lat, lon);
-					std::cout << "lat " << lat << "\n" << "lon " << lon << std::endl;
 					if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
 						stringstream ssSunrise;
 						ssSunrise << ctime(&sunrise);
@@ -708,6 +698,13 @@ void *process_commands(void* arg)
 						result += "sunset @ " + ssSunset.str();
 						thread_sock << result;
 					}
+					
+					//next step is to create c++ alarms that will activate scenes automagically at sunset
+					
+					break;
+				}
+				case Test:
+				{
 					break;
 				}
 				default:
@@ -825,7 +822,6 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL | ";
 			return false;
 		}
-
 	}
 	else
 	{
@@ -835,4 +831,50 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 	}
 
 	return response;
+}
+
+void switchAtHome(){
+	assert(sunrise!=0);
+	assert(sunset!=0);
+	assert(dayScene.compare("")!=0);
+	assert(nightScene.compare("")!=0);
+	assert(awayScene.compare("")!=0);
+	
+	atHome = !atHome;
+	if(atHome) {
+		time_t now = time(NULL);
+		if(now > sunrise && now < sunset && dayScene != ""){
+			// turn on the athome scene set by the user for the day
+			std:: cout << activateScene(dayScene);
+		}
+		else if(now > sunset){
+			// turn on the athome scene set by the user for the evening/night
+			std::cout << activateScene(nightScene);
+		}
+	}
+	else {
+		// going somewhere, swicht off lights...
+		std::cout << activateScene(awayScene);
+	}
+}
+
+string activateScene(string sclabel){
+	uint8 numscenes = 0;
+	uint8 *sceneIds = new uint8[numscenes];
+	
+	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+		throw ProtocolException(3, "No scenes created");
+	}
+	
+	int scid=0;
+	
+	for(int i=0; i<numscenes; ++i){
+		scid = sceneIds[i];
+		if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+			continue;
+		}
+		Manager::Get()->ActivateScene(scid);
+		return "Activate scene "+sclabel+"\n";
+	}
+	throw ProtocolException(4, "Scene not found");
 }

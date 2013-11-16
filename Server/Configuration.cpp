@@ -24,6 +24,7 @@ T lexical_cast(const std::string& s)
 }
 
 Configuration::Configuration() {
+	conf_ini_location = "./cpp/examples/linux/server/Config.ini";
 	create_string_map();
 	std::ifstream conffile;
 	if(open_filestream(conffile))
