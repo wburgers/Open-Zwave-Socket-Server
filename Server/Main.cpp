@@ -72,6 +72,7 @@ static bool g_initFailed = false;
 static bool atHome = true;
 static time_t sunrise = 0, sunset = 0;
 static string dayScene = "", nightScene = "", awayScene = "";
+static Configuration* conf;
 
 typedef struct {
 	uint32			m_homeId;
@@ -322,14 +323,15 @@ void *process_commands(void* arg);
 //-----------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-    pthread_mutexattr_t mutexattr;
+	conf = new Configuration();
+	pthread_mutexattr_t mutexattr;
 
-    pthread_mutexattr_init(&mutexattr);
-    pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&g_criticalSection, &mutexattr);
-    pthread_mutexattr_destroy(&mutexattr);
+	pthread_mutexattr_init(&mutexattr);
+	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&g_criticalSection, &mutexattr);
+	pthread_mutexattr_destroy(&mutexattr);
 
-    pthread_mutex_lock(&initMutex);
+	pthread_mutex_lock(&initMutex);
 
 	// Create the OpenZWave Manager.
 	// The first argument is the path to the config files (where the manufacturer_specific.xml file is located
@@ -339,7 +341,7 @@ int main(int argc, char* argv[]) {
 	Options::Create("./config/", "", "");
 	Options::Get()->Lock();
 
-    Manager::Create();
+	Manager::Create();
 
     // Add a callback handler to the manager.  The second argument is a context that
     // is passed to the OnNotification method.  If the OnNotification is a method of
@@ -686,9 +688,8 @@ void *process_commands(void* arg)
 					//right now it will just update the sunrise and sunset times for today
 					//call zcron.sh from cron to enable this function
 					
-					static Configuration conf; // need to find a better solution for this
 					float lat, lon;
-					conf.GetLocation(lat, lon);
+					conf->GetLocation(lat, lon);
 					if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
 						stringstream ssSunrise;
 						ssSunrise << ctime(&sunrise);
