@@ -106,7 +106,10 @@ void create_string_map()
 	s_mapStringValues["TEST"] = Test;
 }
 
+//functions
+void *process_commands(void* arg);
 bool SetValue(int32 home, int32 node, int32 value, string& err_message);
+void switchAtHome();
 string activateScene(string sclabel);
 
 //-----------------------------------------------------------------------------
@@ -315,8 +318,6 @@ T lexical_cast(const std::string& s)
     return result;
 }
 
-void *process_commands(void* arg);
-
 //-----------------------------------------------------------------------------
 // <main>
 // Create the driver and then wait
@@ -379,13 +380,13 @@ int main(int argc, char* argv[]) {
 		while(true) {
 			try { // for all socket errors
 				Socket server;
-				if(!server.create()){
+				if(!server.create()) {
 					throw SocketException ( "Could not create server socket." );
 				}
-				if(!server.bind(6004)){
+				if(!server.bind(6004)) {
 					throw SocketException ( "Could not bind to port." );
 				}
-				if(!server.listen()){
+				if(!server.listen()) {
 					throw SocketException ( "Could not listen to socket." );
 				}
 				Socket new_sock;
@@ -396,14 +397,11 @@ int main(int argc, char* argv[]) {
 					int thread_sock2;
 					thread_sock2 = new_sock.GetSock();
 					//std::cout << thread_sock2 << endl;
-					if( pthread_create( &thread , NULL ,  process_commands ,(void*) thread_sock2) < 0)
-					{
+					if( pthread_create( &thread , NULL ,  process_commands ,(void*) thread_sock2) < 0) {
 						throw std::runtime_error("Unable to create thread");
 					}
-					else
-					{
+					else {
 						std::cout<< "Connection Created" << endl;
-						
 					}
 				}
 			}
@@ -436,7 +434,6 @@ int main(int argc, char* argv[]) {
 
 void *process_commands(void* arg)
 {
-
 	Socket thread_sock;
 	thread_sock.SetSock((int)arg);
 	while(true) {
@@ -554,7 +551,7 @@ void *process_commands(void* arg)
 				}
 				case SceneC:
 				{
-					if(v.size() < 3){
+					if(v.size() < 3) {
 						throw ProtocolException(2, "Wrong number of arguments");
 					}
 					switch(s_mapStringValues[trim(v[1].c_str())])
@@ -562,8 +559,7 @@ void *process_commands(void* arg)
 						case Create:
 						{
 							string sclabel = trim(v[2].c_str());
-							if(int scid = Manager::Get()->CreateScene())
-							{
+							if(int scid = Manager::Get()->CreateScene()) {
 								stringstream ssID;
 								ssID << scid;
 								Manager::Get()->SetSceneLabel(scid, sclabel);
@@ -575,7 +571,7 @@ void *process_commands(void* arg)
 						}
 						case Add:
 						{
-							if(v.size() != 5){
+							if(v.size() != 5) {
 								throw ProtocolException(2, "Wrong number of arguments");
 							}
 							uint8 numscenes = 0;
@@ -595,13 +591,13 @@ void *process_commands(void* arg)
 							int Node = lexical_cast<int>(v[3].c_str());
 							int Level = lexical_cast<int>(v[4].c_str());
 							
-							for(int i=0; i<numscenes; ++i){
+							for(int i=0; i<numscenes; ++i) {
 								scid = sceneIds[i];
 								stringstream ssID;
 								ssID << scid;
 								result = "scid " + ssID.str() + "\n";
 								thread_sock << result;
-								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+								if(sclabel != Manager::Get()->GetSceneLabel(scid)) {
 									continue;
 								}
 								result = "Found right scene\n";
@@ -624,7 +620,7 @@ void *process_commands(void* arg)
 						}
 						case Remove:
 						{
-							if(v.size() != 4){
+							if(v.size() != 4) {
 								throw ProtocolException(2, "Wrong number of arguments");
 							}
 							uint8 numscenes = 0;
@@ -706,6 +702,7 @@ void *process_commands(void* arg)
 				}
 				case Test:
 				{
+					switchAtHome();
 					break;
 				}
 				default:
@@ -738,11 +735,9 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 	bool response;
 	bool cmdfound = false;
 	
-	if ( NodeInfo* nodeInfo = GetNodeInfo( home, node ) )
-	{
+	if ( NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
 		// Find the correct instance
-		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it )
-		{
+		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it ) {
 			int id = (*it).GetCommandClassId();
 			//int inst = (*it).GetInstance();
 			string label = Manager::Get()->GetValueLabel( (*it) );
@@ -752,22 +747,18 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 				case COMMAND_CLASS_SWITCH_BINARY:
 				{
 					// label="Switch" is mandatory, else it isn't a switch
-					if ( label == "Switch" )
-					{
+					if ( label == "Switch" ) {
 						// If it is a binary CommandClass, then we only allow 0 (off) or 255 (on)
-						if ( value > 0 && value < 255 )
-						{
+						if ( value > 0 && value < 255 ) {
 							continue;
 						}
 					}
-
 					break;
 				}
 				case COMMAND_CLASS_SWITCH_MULTILEVEL:
 				{
 					// label="Level" is mandatory, else it isn't a dimmer type device
-					if ( label != "Level" )
-					{
+					if ( label != "Level" ) {
 						continue;
 					}
 					break;
@@ -815,7 +806,6 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 			}
 		}
 
-
 		if ( cmdfound == false )
 		{
 			//WriteLog( LogLevel_Debug, false, "Value=%d", value );
@@ -834,7 +824,7 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 	return response;
 }
 
-void switchAtHome(){
+void switchAtHome() {
 	assert(sunrise!=0);
 	assert(sunset!=0);
 	assert(dayScene.compare("")!=0);
@@ -844,11 +834,11 @@ void switchAtHome(){
 	atHome = !atHome;
 	if(atHome) {
 		time_t now = time(NULL);
-		if(now > sunrise && now < sunset && dayScene != ""){
+		if(now > sunrise && now < sunset && dayScene != "") {
 			// turn on the athome scene set by the user for the day
 			std:: cout << activateScene(dayScene);
 		}
-		else if(now > sunset){
+		else if(now > sunset) {
 			// turn on the athome scene set by the user for the evening/night
 			std::cout << activateScene(nightScene);
 		}
