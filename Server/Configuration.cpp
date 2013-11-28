@@ -6,7 +6,7 @@
 #include <sstream>
 #include <map>
 
-enum contents {Undefined = 0, lat_n, lon_n};
+enum contents {Undefined = 0, lat_n, lon_n, dayScene_n, nightScene_n, awayScene_n};
 static std::map<std::string, contents> s_mapStringValues;
 
 template <typename T>
@@ -21,18 +21,12 @@ T lexical_cast(const std::string& s) {
 	return result;
 }
 
-Configuration::Configuration() {
-	conf_ini_location = "./cpp/examples/linux/server/Config.ini";
+Configuration::Configuration() : conf_ini_location("./cpp/examples/linux/server/Config.ini"), dayScene(""), nightScene(""), awayScene("") {
 	create_string_map();
 	std::ifstream conffile;
 	if(open_filestream(conffile))
 		if(parse_filestream(conffile))
 		{}
-}
-
-Configuration::~Configuration() {
-	//delete &lat;
-	//delete &lon;
 }
 
 bool Configuration::open_filestream(std::ifstream& conffile) {
@@ -87,6 +81,15 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 			case lon_n:
 				lon = lexical_cast<float>(value);
 				break;
+			case dayScene_n:
+				dayScene = value;
+				break;
+			case nightScene_n:
+				nightScene = value;
+				break;
+			case awayScene_n:
+				awayScene = value;
+				break;
 			default:
 				return false;
 				break;
@@ -102,10 +105,26 @@ void Configuration::create_string_map()
 {
     s_mapStringValues["lat"] = lat_n;
 	s_mapStringValues["lon"] = lon_n;
+	s_mapStringValues["dayScene"] = dayScene_n;
+	s_mapStringValues["nightScene"] = nightScene_n;
+	s_mapStringValues["awayScene"] = awayScene_n;
 }
 
 bool Configuration::GetLocation(float &lat_, float &lon_) {
 	lat_ = lat;
 	lon_ = lon;
+	return true;
+}
+
+bool Configuration::GetDayScene(std::string &dayScene_) {
+	dayScene_ = dayScene;
+	return true;
+}
+bool Configuration::GetNightScene(std::string &nightScene_) {
+	nightScene_ = nightScene;
+	return true;
+}
+bool Configuration::GetAwayScene(std::string &awayScene_) {
+	awayScene_ = awayScene;
 	return true;
 }

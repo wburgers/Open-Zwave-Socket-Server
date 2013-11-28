@@ -80,14 +80,13 @@ struct Alarm {
 	time_t			alarmtime;
 	string			description;
 	bool operator<(Alarm const &other)  { return alarmtime < other.alarmtime; }
+	bool operator==(Alarm const &other)  { return alarmtime == other.alarmtime; }
 };
 
 // Value-Defintions of the different String values
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
 static bool atHome = true;
-static time_t sunrise = 0, sunset = 0;
-static string dayScene = "", nightScene = "", awayScene = "";
 static Configuration* conf;
 static bool alarmset = false;
 static list<Alarm> alarmlist;
@@ -681,13 +680,13 @@ void *process_commands(void* arg)
 						}
 						case Activate:
 						{
-							string result = activateScene(trim(v[2].c_str()));
+							string result = activateScene(v[2].c_str());
 							thread_sock << result;
 							break;
 						}
 						default:
-						throw ProtocolException(1, "Unknown Scene command");
-						break;
+							throw ProtocolException(1, "Unknown Scene command");
+							break;
 					}
 					break;
 				}
@@ -697,6 +696,7 @@ void *process_commands(void* arg)
 					//right now it will just update the sunrise and sunset times for today
 					//call zcron.sh from cron to enable this function
 					
+					time_t sunrise = 0, sunset = 0;
 					float lat, lon;
 					conf->GetLocation(lat, lon);
 					if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
@@ -720,6 +720,7 @@ void *process_commands(void* arg)
 					}
 					
 					alarmlist.sort();
+					alarmlist.unique();
 					
 					time_t now = time(NULL);
 					
@@ -732,7 +733,7 @@ void *process_commands(void* arg)
 						std::cout << ssTime.str() << endl;
 					}
 					
-					if(!alarmset && (alarmlist.front().alarmtime > now)) {
+					if(!alarmlist.empty() && !alarmset && (alarmlist.front().alarmtime > now)) {
 						signal(SIGALRM, sigalrm_handler);   
 						alarm(alarmlist.front().alarmtime - now);
 						alarmset = true;
@@ -743,6 +744,7 @@ void *process_commands(void* arg)
 				case Test:
 				{
 					switchAtHome();
+					std::cout << atHome << endl;
 					break;
 				}
 				default:
@@ -854,30 +856,64 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 }
 
 void switchAtHome() {
-	assert(sunrise!=0);
-	assert(sunset!=0);
-	
-	atHome = !atHome;
-	if(atHome) {
-		time_t now = time(NULL);
-		if(now > sunrise && now < sunset && dayScene != "") {
-			// turn on the athome scene set by the user for the day
-			std:: cout << activateScene(dayScene);
+	time_t sunrise = 0, sunset = 0;
+	float lat, lon;
+	conf->GetLocation(lat, lon);
+	if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
+		atHome = !atHome;
+		if(atHome) {
+			time_t now = time(NULL);
+			if(now > sunrise && now < sunset) {
+				// turn on the athome scene set by the user for the day
+				std::string dayScene;
+				conf->GetDayScene(dayScene);
+				try {
+					std::cout << activateScene(dayScene);
+				}
+				catch (ProtocolException& e) {
+					string what = "ProtocolException: ";
+					what += e.what();
+					std::cout << what << endl;
+					std::cout << "No dayScene is set, set it in Config.ini" << endl;
+				}
+			}
+			else if(now > sunset) {
+				// turn on the athome scene set by the user for the evening/night
+				std::string nightScene;
+				conf->GetNightScene(nightScene);
+				try {
+					std::cout << activateScene(nightScene);
+				}
+				catch (ProtocolException& e) {
+					string what = "ProtocolException: ";
+					what += e.what();
+					std::cout << what << endl;
+					std::cout << "No nightScene is set, set it in Config.ini" << endl;
+				}
+			}
 		}
-		else if(now > sunset) {
-			// turn on the athome scene set by the user for the evening/night
-			std::cout << activateScene(nightScene);
+		else {
+			// going somewhere, swicht off lights...
+			std::string awayScene;
+			conf->GetAwayScene(awayScene);
+			try {
+				std::cout << activateScene(awayScene);
+			}
+			catch (ProtocolException& e) {
+				string what = "ProtocolException: ";
+				what += e.what();
+				std::cout << what << endl;
+				std::cout << "No awayScene is set, set it in Config.ini" << endl;
+			}
 		}
-	}
-	else {
-		// going somewhere, swicht off lights...
-		std::cout << activateScene(awayScene);
 	}
 }
 
 string activateScene(string sclabel) {
 	uint8 numscenes = 0;
 	uint8 *sceneIds = new uint8[numscenes];
+	
+	sclabel = trim(sclabel);
 	
 	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
 		throw ProtocolException(3, "No scenes created");
@@ -898,14 +934,17 @@ string activateScene(string sclabel) {
 
 void sigalrm_handler(int sig) {
 	alarmset = false;
-	Alarm alarm = alarmlist.front();
+	Alarm currentAlarm = alarmlist.front();
 	alarmlist.pop_front();
 	if(atHome) {
-		switch(s_mapStringTriggers[alarm.description])
+		switch(s_mapStringTriggers[currentAlarm.description])
 		{
 			case Sunrise:
+			{
+				std::string dayScene;
+				conf->GetDayScene(dayScene);
 				try {
-					activateScene(dayScene);
+					std::cout << activateScene(dayScene);
 				}
 				catch (ProtocolException& e) {
 					string what = "ProtocolException: ";
@@ -914,9 +953,13 @@ void sigalrm_handler(int sig) {
 					std::cout << "trigger went off, but no Scene is set for Sunrise" << endl;
 				}
 				break;
+			}
 			case Sunset:
+			{
+				std::string nightScene;
+				conf->GetNightScene(nightScene);
 				try {
-					activateScene(nightScene);
+					std::cout << activateScene(nightScene);
 				}
 				catch (ProtocolException& e) {
 					string what = "ProtocolException: ";
@@ -925,10 +968,23 @@ void sigalrm_handler(int sig) {
 					std::cout << "trigger went off, but no Scene is set for Sunset" << endl;
 				}
 				break;
+			}
 			default:
 				// check if the description can be used as a Scene name
 				// if that fails, check if the description can be parsed as a command
 			break;
 		}
+	}
+	
+	// more alarms on the alarmlist? Set the next one (the list is already sorted...)
+	
+	time_t now = time(NULL);
+	
+	while(!alarmlist.empty() && (alarmlist.front().alarmtime) <= now)
+	{alarmlist.pop_front();}
+					
+	if(!alarmlist.empty() && !alarmset && (alarmlist.front().alarmtime > now)) {
+		alarm((alarmlist.front().alarmtime - now));
+		alarmset = true;
 	}
 }
