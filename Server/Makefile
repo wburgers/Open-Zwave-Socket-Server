@@ -37,16 +37,19 @@ lib:
 	$(MAKE) -C ../../../build/linux
 
 Socket: Socket.o
-	$(LD) -o Socket.o Socket.cpp
+	$(LD) $(CFLAGS) Socket.cpp -o Socket.o
 
-Sunrise: Sunrise.o
+Sunrise: sunrise.o
 	$(LD) -c -Wall sunrise.cpp -o Sunrise.o -lm
+	
+Core:
+	$(LD) $(CFLAGS) Configuration.cpp -o Core.o
 
-test: Main.o Socket.o lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o -pthread -ludev
+test: Main.o Socket Sunrise Core lib
+	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Core.o -pthread -ludev
 
 clean:
-	rm -f test Main.o Socket.o
+	rm -f test Main.o Socket.o Sunrise.o Core.o
 
 XMLLINT := $(shell whereis -b xmllint | cut -c10-)
 

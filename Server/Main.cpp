@@ -53,6 +53,8 @@
 #include "SocketException.h"
 #include "ProtocolException.h"
 #include "sunrise.h"
+#include "Configuration.h"
+
 #include <time.h>
 #include <string>
 #include <iostream>
@@ -60,14 +62,11 @@
 #include <vector>
 #include <stdlib.h>
 #include <sstream>
-#include <iostream>
 #include <stdexcept>
+#include <signal.h>
 
 #include "Main.h"
 using namespace OpenZWave;
-
-static uint32 g_homeId = 0;
-static bool g_initFailed = false;
 
 typedef struct {
 	uint32			m_homeId;
@@ -77,30 +76,55 @@ typedef struct {
 	list<ValueID>	m_values;
 } NodeInfo;
 
-// Value-Defintions of the different String values
+struct Alarm {
+	time_t			alarmtime;
+	string			description;
+	bool operator<(Alarm const &other)  { return alarmtime < other.alarmtime; }
+	bool operator==(Alarm const &other)  { return alarmtime == other.alarmtime; }
+};
 
+// Value-Defintions of the different String values
+static uint32 g_homeId = 0;
+static bool g_initFailed = false;
+static bool atHome = true;
+static Configuration* conf;
+static bool alarmset = false;
+static list<Alarm> alarmlist;
 static list<NodeInfo*> g_nodes;
 static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
-enum Commands {Undefined = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Test};
-static std::map<std::string, Commands> s_mapStringValues;
+enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList};
+enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
+static std::map<std::string, Commands> s_mapStringCommands;
+static std::map<std::string, Triggers> s_mapStringTriggers;
 
-void create_string_map()
+void create_string_maps()
 {
-    s_mapStringValues["ALIST"] = AList;
-	s_mapStringValues["DEVICE"] = Device;
-	s_mapStringValues["SETNODE"] = SetNode;
-	s_mapStringValues["SCENE"] = SceneC;
-	s_mapStringValues["CREATE"] = Create;
-	s_mapStringValues["ADD"] = Add;
-	s_mapStringValues["REMOVE"] = Remove;
-	s_mapStringValues["ACTIVATE"] = Activate;
-	s_mapStringValues["TEST"] = Test;
+	s_mapStringCommands["ALIST"] = AList;
+	s_mapStringCommands["DEVICE"] = Device;
+	s_mapStringCommands["SETNODE"] = SetNode;
+	s_mapStringCommands["SCENE"] = SceneC;
+	s_mapStringCommands["CREATE"] = Create;
+	s_mapStringCommands["ADD"] = Add;
+	s_mapStringCommands["REMOVE"] = Remove;
+	s_mapStringCommands["ACTIVATE"] = Activate;
+	s_mapStringCommands["CRON"] = Cron;
+	s_mapStringCommands["SWITCH"] = Switch;
+	s_mapStringCommands["TEST"] = Test;
+	s_mapStringCommands["ALARMLIST"] = AlarmList;
+	
+	s_mapStringTriggers["Sunrise"] = Sunrise;
+	s_mapStringTriggers["Sunset"] = Sunset;
 }
 
+//functions
+void *process_commands(void* arg);
 bool SetValue(int32 home, int32 node, int32 value, string& err_message);
+void switchAtHome();
+string activateScene(string sclabel);
+void sigalrm_handler(int sig);
 
 //-----------------------------------------------------------------------------
 // <GetNodeInfo>
@@ -308,22 +332,21 @@ T lexical_cast(const std::string& s)
     return result;
 }
 
-void *process_commands(void* arg);
-
 //-----------------------------------------------------------------------------
 // <main>
 // Create the driver and then wait
 //-----------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-    pthread_mutexattr_t mutexattr;
+	conf = new Configuration();
+	pthread_mutexattr_t mutexattr;
 
-    pthread_mutexattr_init(&mutexattr);
-    pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&g_criticalSection, &mutexattr);
-    pthread_mutexattr_destroy(&mutexattr);
+	pthread_mutexattr_init(&mutexattr);
+	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&g_criticalSection, &mutexattr);
+	pthread_mutexattr_destroy(&mutexattr);
 
-    pthread_mutex_lock(&initMutex);
+	pthread_mutex_lock(&initMutex);
 
 	// Create the OpenZWave Manager.
 	// The first argument is the path to the config files (where the manufacturer_specific.xml file is located
@@ -333,7 +356,7 @@ int main(int argc, char* argv[]) {
 	Options::Create("./config/", "", "");
 	Options::Get()->Lock();
 
-    Manager::Create();
+	Manager::Create();
 
     // Add a callback handler to the manager.  The second argument is a context that
     // is passed to the OnNotification method.  If the OnNotification is a method of
@@ -356,7 +379,7 @@ int main(int argc, char* argv[]) {
 
     if (!g_initFailed) {
 	
-		create_string_map();
+		create_string_maps();
 		Manager::Get()->WriteConfig(g_homeId);
 
 		Driver::DriverData data;
@@ -371,13 +394,13 @@ int main(int argc, char* argv[]) {
 		while(true) {
 			try { // for all socket errors
 				Socket server;
-				if(!server.create()){
+				if(!server.create()) {
 					throw SocketException ( "Could not create server socket." );
 				}
-				if(!server.bind(6004)){
+				if(!server.bind(6004)) {
 					throw SocketException ( "Could not bind to port." );
 				}
-				if(!server.listen()){
+				if(!server.listen()) {
 					throw SocketException ( "Could not listen to socket." );
 				}
 				Socket new_sock;
@@ -388,14 +411,11 @@ int main(int argc, char* argv[]) {
 					int thread_sock2;
 					thread_sock2 = new_sock.GetSock();
 					//std::cout << thread_sock2 << endl;
-					if( pthread_create( &thread , NULL ,  process_commands ,(void*) thread_sock2) < 0)
-					{
+					if( pthread_create( &thread , NULL ,  process_commands ,(void*) thread_sock2) < 0) {
 						throw std::runtime_error("Unable to create thread");
 					}
-					else
-					{
+					else {
 						std::cout<< "Connection Created" << endl;
-						
 					}
 				}
 			}
@@ -428,7 +448,6 @@ int main(int argc, char* argv[]) {
 
 void *process_commands(void* arg)
 {
-
 	Socket thread_sock;
 	thread_sock.SetSock((int)arg);
 	while(true) {
@@ -445,7 +464,7 @@ void *process_commands(void* arg)
 			vector<string> v;
 			split(data, '~', v);
 			string result = "";
-			switch (s_mapStringValues[trim(v[0].c_str())])
+			switch (s_mapStringCommands[trim(v[0].c_str())])
 			{
 				case AList:
 				{
@@ -546,16 +565,15 @@ void *process_commands(void* arg)
 				}
 				case SceneC:
 				{
-					if(v.size() < 3){
+					if(v.size() < 3) {
 						throw ProtocolException(2, "Wrong number of arguments");
 					}
-					switch(s_mapStringValues[trim(v[1].c_str())])
+					switch(s_mapStringCommands[trim(v[1].c_str())])
 					{
 						case Create:
 						{
 							string sclabel = trim(v[2].c_str());
-							if(int scid = Manager::Get()->CreateScene())
-							{
+							if(int scid = Manager::Get()->CreateScene()) {
 								stringstream ssID;
 								ssID << scid;
 								Manager::Get()->SetSceneLabel(scid, sclabel);
@@ -567,6 +585,9 @@ void *process_commands(void* arg)
 						}
 						case Add:
 						{
+							if(v.size() != 5) {
+								throw ProtocolException(2, "Wrong number of arguments");
+							}
 							uint8 numscenes = 0;
 							uint8 *sceneIds = new uint8[numscenes];
 							
@@ -584,13 +605,13 @@ void *process_commands(void* arg)
 							int Node = lexical_cast<int>(v[3].c_str());
 							int Level = lexical_cast<int>(v[4].c_str());
 							
-							for(int i=0; i<numscenes; ++i){
+							for(int i=0; i<numscenes; ++i) {
 								scid = sceneIds[i];
 								stringstream ssID;
 								ssID << scid;
 								result = "scid " + ssID.str() + "\n";
 								thread_sock << result;
-								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+								if(sclabel != Manager::Get()->GetSceneLabel(scid)) {
 									continue;
 								}
 								result = "Found right scene\n";
@@ -613,6 +634,9 @@ void *process_commands(void* arg)
 						}
 						case Remove:
 						{
+							if(v.size() != 4) {
+								throw ProtocolException(2, "Wrong number of arguments");
+							}
 							uint8 numscenes = 0;
 							uint8 *sceneIds = new uint8[numscenes];
 							
@@ -658,49 +682,88 @@ void *process_commands(void* arg)
 						}
 						case Activate:
 						{
-							uint8 numscenes = 0;
-							uint8 *sceneIds = new uint8[numscenes];
-							
-							if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-								throw ProtocolException(3, "No scenes created");
-							}
-							
-							string sclabel = trim(v[2].c_str());
-							int scid=0;
-							
-							for(int i=0; i<numscenes; ++i){
-								scid = sceneIds[i];
-								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
-									continue;
-								}
-								result = "Activate scene "+sclabel+"\n";
-								thread_sock << result;
-								Manager::Get()->ActivateScene(scid);
-							}
+							string result = activateScene(v[2].c_str());
+							thread_sock << result;
 							break;
 						}
 						default:
-						throw ProtocolException(1, "Unknown Scene command");
-						break;
+							throw ProtocolException(1, "Unknown Scene command");
+							break;
 					}
 					break;
 				}
-				case Test:
+				case Cron:
 				{
-					time_t sunrise, sunset;
-					float lat = 56.84672;
-					float lon = 7.8457018;
+					//planning to add a google calendar add-in here.
+					//right now it will just update the sunrise and sunset times for today
+					//call zcron.sh from cron to enable this function
+					
+					time_t sunrise = 0, sunset = 0;
+					float lat, lon;
+					conf->GetLocation(lat, lon);
 					if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
-						stringstream ssSunrise;
+						/* stringstream ssSunrise;
 						ssSunrise << ctime(&sunrise);
 						stringstream ssSunset;
 						ssSunset << ctime(&sunset);
 						result = "sunrise @ " + ssSunrise.str();
 						result += "sunset @ " + ssSunset.str();
-						thread_sock << result;
+						thread_sock << result; */
+						
+						Alarm sunriseAlarm;
+						Alarm sunsetAlarm;
+						sunriseAlarm.alarmtime = sunrise;
+						sunsetAlarm.alarmtime = sunset;
+						sunriseAlarm.description = "Sunrise";
+						sunsetAlarm.description = "Sunset";
+						
+						alarmlist.push_back(sunriseAlarm);
+						alarmlist.push_back(sunsetAlarm);
 					}
+					
+					alarmlist.sort();
+					alarmlist.unique();
+					
+					time_t now = time(NULL);
+					
+					while(!alarmlist.empty() && (alarmlist.front().alarmtime) <= now)
+					{alarmlist.pop_front();}
+					
+					for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
+						stringstream ssTime;
+						ssTime << ctime(&((*it).alarmtime));
+						std::cout << ssTime.str();
+					}
+					
+					if(!alarmlist.empty() && !alarmset && (alarmlist.front().alarmtime > now)) {
+						signal(SIGALRM, sigalrm_handler);   
+						alarm(alarmlist.front().alarmtime - now);
+						alarmset = true;
+					}
+					
 					break;
 				}
+				case Switch:
+				{
+					switchAtHome();
+					break;
+				}
+				case Test:
+				{
+					switchAtHome();
+					std::cout << atHome << endl;
+					string test = "";
+					(atHome)?test="true\n":test="false\n";
+					thread_sock << test;
+					break;
+				}
+				case AlarmList:
+					for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
+						stringstream ssTime;
+						ssTime << ctime(&(it->alarmtime));
+						thread_sock << ssTime.str();
+					}
+					break;
 				default:
 					throw ProtocolException(1, "Unknown command");
 					break;
@@ -731,11 +794,9 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 	bool response;
 	bool cmdfound = false;
 	
-	if ( NodeInfo* nodeInfo = GetNodeInfo( home, node ) )
-	{
+	if ( NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
 		// Find the correct instance
-		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it )
-		{
+		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it ) {
 			int id = (*it).GetCommandClassId();
 			//int inst = (*it).GetInstance();
 			string label = Manager::Get()->GetValueLabel( (*it) );
@@ -745,22 +806,18 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 				case COMMAND_CLASS_SWITCH_BINARY:
 				{
 					// label="Switch" is mandatory, else it isn't a switch
-					if ( label == "Switch" )
-					{
+					if ( label == "Switch" ) {
 						// If it is a binary CommandClass, then we only allow 0 (off) or 255 (on)
-						if ( value > 0 && value < 255 )
-						{
+						if ( value > 0 && value < 255 ) {
 							continue;
 						}
 					}
-
 					break;
 				}
 				case COMMAND_CLASS_SWITCH_MULTILEVEL:
 				{
 					// label="Level" is mandatory, else it isn't a dimmer type device
-					if ( label != "Level" )
-					{
+					if ( label != "Level" ) {
 						continue;
 					}
 					break;
@@ -771,59 +828,180 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 				}
 			}
 
-			if ( ValueID::ValueType_Bool == (*it).GetType() )
-			{
+			if ( ValueID::ValueType_Bool == (*it).GetType() ) {
 				bool_value = (bool)value;
 				response = Manager::Get()->SetValue( *it, bool_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_Byte == (*it).GetType() )
-			{
+			else if ( ValueID::ValueType_Byte == (*it).GetType() ) {
 				uint8_value = (uint8)value;
 				response = Manager::Get()->SetValue( *it, uint8_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_Short == (*it).GetType() )
-			{
+			else if ( ValueID::ValueType_Short == (*it).GetType() ) {
 				uint16_value = (uint16)value;
 				response = Manager::Get()->SetValue( *it, uint16_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_Int == (*it).GetType() )
-			{
+			else if ( ValueID::ValueType_Int == (*it).GetType() ) {
 				int_value = value;
 				response = Manager::Get()->SetValue( *it, int_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_List == (*it).GetType() )
-			{
+			else if ( ValueID::ValueType_List == (*it).GetType() ) {
 				response = Manager::Get()->SetValue( *it, value );
 				cmdfound = true;
 			}
-			else
-			{
-				//WriteLog(LogLevel_Debug, false, "Return=false (unknown ValueType)");
+			else {
 				err_message += "unknown ValueType | ";
 				return false;
 			}
 		}
 
-
-		if ( cmdfound == false )
-		{
-			//WriteLog( LogLevel_Debug, false, "Value=%d", value );
-			//WriteLog( LogLevel_Debug, false, "Error=Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL");
+		if ( cmdfound == false ) {
 			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL | ";
 			return false;
 		}
-
 	}
-	else
-	{
+	else {
 		//WriteLog( LogLevel_Debug, false, "Return=false (node doesn't exist)" );
 		err_message += "node doesn't exist";
 		response = false;
 	}
 
 	return response;
+}
+
+void switchAtHome() {
+	time_t sunrise = 0, sunset = 0;
+	float lat, lon;
+	conf->GetLocation(lat, lon);
+	if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
+		atHome = !atHome;
+		if(atHome) {
+			time_t now = time(NULL);
+			if(now > sunrise && now < sunset) {
+				// turn on the athome scene set by the user for the day
+				std::string dayScene;
+				conf->GetDayScene(dayScene);
+				try {
+					std::cout << activateScene(dayScene);
+				}
+				catch (ProtocolException& e) {
+					string what = "ProtocolException: ";
+					what += e.what();
+					std::cout << what << endl;
+					std::cout << "No dayScene is set, set it in Config.ini" << endl;
+				}
+			}
+			else if(now > sunset) {
+				// turn on the athome scene set by the user for the evening/night
+				std::string nightScene;
+				conf->GetNightScene(nightScene);
+				try {
+					std::cout << activateScene(nightScene);
+				}
+				catch (ProtocolException& e) {
+					string what = "ProtocolException: ";
+					what += e.what();
+					std::cout << what << endl;
+					std::cout << "No nightScene is set, set it in Config.ini" << endl;
+				}
+			}
+		}
+		else {
+			// going somewhere, swicht off lights...
+			std::string awayScene;
+			conf->GetAwayScene(awayScene);
+			try {
+				std::cout << activateScene(awayScene);
+			}
+			catch (ProtocolException& e) {
+				string what = "ProtocolException: ";
+				what += e.what();
+				std::cout << what << endl;
+				std::cout << "No awayScene is set, set it in Config.ini" << endl;
+			}
+		}
+	}
+}
+
+string activateScene(string sclabel) {
+	uint8 numscenes = 0;
+	uint8 *sceneIds = new uint8[numscenes];
+	
+	sclabel = trim(sclabel);
+	
+	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+		throw ProtocolException(3, "No scenes created");
+	}
+	
+	int scid=0;
+	
+	for(int i=0; i<numscenes; ++i) {
+		scid = sceneIds[i];
+		if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+			continue;
+		}
+		Manager::Get()->ActivateScene(scid);
+		return "Activate scene "+sclabel+"\n";
+	}
+	throw ProtocolException(4, "Scene not found");
+}
+
+void sigalrm_handler(int sig) {
+	alarmset = false;
+	Alarm currentAlarm = alarmlist.front();
+	alarmlist.pop_front();
+	if(atHome) {
+		switch(s_mapStringTriggers[currentAlarm.description])
+		{
+			case Sunrise:
+			{
+				std::string dayScene;
+				conf->GetDayScene(dayScene);
+				try {
+					std::cout << activateScene(dayScene);
+				}
+				catch (ProtocolException& e) {
+					string what = "ProtocolException: ";
+					what += e.what();
+					std::cout << what << endl;
+					std::cout << "trigger went off, but no Scene is set for Sunrise" << endl;
+				}
+				break;
+			}
+			case Sunset:
+			{
+				std::string nightScene;
+				conf->GetNightScene(nightScene);
+				try {
+					std::cout << activateScene(nightScene);
+				}
+				catch (ProtocolException& e) {
+					string what = "ProtocolException: ";
+					what += e.what();
+					std::cout << what << endl;
+					std::cout << "trigger went off, but no Scene is set for Sunset" << endl;
+				}
+				break;
+			}
+			default:
+				// check if the description can be used as a Scene name
+				// if that fails, check if the description can be parsed as a command
+			break;
+		}
+	}
+	
+	// more alarms on the alarmlist? Set the next one (the list is already sorted...)
+	
+	time_t now = time(NULL);
+	
+	while(!alarmlist.empty() && (alarmlist.front().alarmtime) <= now)
+	{alarmlist.pop_front();}
+					
+	if(!alarmlist.empty() && !alarmset && (alarmlist.front().alarmtime > now)) {
+		alarm((alarmlist.front().alarmtime - now));
+		alarmset = true;
+	}
 }
