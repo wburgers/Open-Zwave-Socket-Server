@@ -95,7 +95,7 @@ static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
-enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Test};
+enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
@@ -111,7 +111,9 @@ void create_string_maps()
 	s_mapStringCommands["REMOVE"] = Remove;
 	s_mapStringCommands["ACTIVATE"] = Activate;
 	s_mapStringCommands["CRON"] = Cron;
+	s_mapStringCommands["SWITCH"] = Switch;
 	s_mapStringCommands["TEST"] = Test;
+	s_mapStringCommands["ALARMLIST"] = AlarmList;
 	
 	s_mapStringTriggers["Sunrise"] = Sunrise;
 	s_mapStringTriggers["Sunset"] = Sunset;
@@ -730,7 +732,7 @@ void *process_commands(void* arg)
 					for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
 						stringstream ssTime;
 						ssTime << ctime(&((*it).alarmtime));
-						std::cout << ssTime.str() << endl;
+						std::cout << ssTime.str();
 					}
 					
 					if(!alarmlist.empty() && !alarmset && (alarmlist.front().alarmtime > now)) {
@@ -741,12 +743,27 @@ void *process_commands(void* arg)
 					
 					break;
 				}
+				case Switch:
+				{
+					switchAtHome();
+					break;
+				}
 				case Test:
 				{
 					switchAtHome();
 					std::cout << atHome << endl;
+					string test = "";
+					(atHome)?test="true\n":test="false\n";
+					thread_sock << test;
 					break;
 				}
+				case AlarmList:
+					for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
+						stringstream ssTime;
+						ssTime << ctime(&(it->alarmtime));
+						thread_sock << ssTime.str();
+					}
+					break;
 				default:
 					throw ProtocolException(1, "Unknown command");
 					break;
