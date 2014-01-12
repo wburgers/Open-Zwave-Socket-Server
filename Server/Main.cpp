@@ -30,6 +30,9 @@
 //
 //-----------------------------------------------------------------------------
 // Other modifications completed by conradvassallo.com, then thomasloughlin.com
+// This version is by willemburgers.nl
+
+//Open-Zwave includes:
 #include <unistd.h>
 #include <pthread.h>
 #include "Options.h"
@@ -49,12 +52,15 @@
 #include "ValueShort.h"
 #include "ValueString.h"
 
+//External classes and libs
 #include "Socket.h"
 #include "SocketException.h"
 #include "ProtocolException.h"
 #include "sunrise.h"
 #include "Configuration.h"
+#include <libwebsockets.h>
 
+//Necessary includes for Main
 #include <time.h>
 #include <string>
 #include <iostream>
@@ -83,7 +89,6 @@ struct Alarm {
 	bool operator==(Alarm const &other)  { return alarmtime == other.alarmtime; }
 };
 
-// Value-Defintions of the different String values
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
 static bool atHome = true;
@@ -95,7 +100,8 @@ static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
-enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList};
+// Value-Defintions of the different String values
+enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList, ControllerC, Cancel};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
@@ -114,16 +120,19 @@ void create_string_maps()
 	s_mapStringCommands["SWITCH"] = Switch;
 	s_mapStringCommands["TEST"] = Test;
 	s_mapStringCommands["ALARMLIST"] = AlarmList;
+	s_mapStringCommands["CONTROLLER"] = ControllerC;
+	s_mapStringCommands["CANCEL"] = Cancel;
 	
 	s_mapStringTriggers["Sunrise"] = Sunrise;
 	s_mapStringTriggers["Sunset"] = Sunset;
 }
 
 //functions
-void *process_commands(void* arg);
+void *run_socket(void* arg);
+std::string process_commands(std::string data);
 bool SetValue(int32 home, int32 node, int32 value, string& err_message);
-void switchAtHome();
-string activateScene(string sclabel);
+std::string switchAtHome();
+std::string activateScene(string sclabel);
 void sigalrm_handler(int sig);
 
 //-----------------------------------------------------------------------------
@@ -297,6 +306,241 @@ void OnNotification(Notification const* _notification, void* _context) {
 	pthread_mutex_unlock(&g_criticalSection);
 }
 
+void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err, void *ct )
+{
+	//m_structCtrl *ctrl = (m_structCtrl *)ct;
+
+	// Possible ControllerState values:
+	// ControllerState_Normal     - No command in progress.
+	// ControllerState_Starting   - The command is starting.
+	// ControllerState_Cancel     - The command was cancelled.
+	// ControllerState_Error      - Command invocation had error(s) and was aborted.
+	// ControllerState_Sleeping   - Controller command is on a sleep queue wait for device.
+	// ControllerState_Waiting    - Controller is waiting for a user action.
+	// ControllerState_InProgress - The controller is communicating with the other device to carry out the command.
+	// ControllerState_Completed  - The command has completed successfully.
+	// ControllerState_Failed     - The command has failed.
+	// ControllerState_NodeOK     - Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node is OK.
+	// ControllerState_NodeFailed - Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node has failed.
+
+	pthread_mutex_lock( &g_criticalSection );
+
+	switch (cs) {
+		case Driver::ControllerState_Normal:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Normal - no command in progress", ctrl->m_homeId );
+			std::cout << "ControllerState: Normal" << endl;
+			//ctrl->m_controllerBusy = false;
+			break;
+		}
+		case Driver::ControllerState_Starting:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Starting - the command is starting", ctrl->m_homeId );
+			std::cout << "ControllerState: Starting" << endl;
+			break;
+		}
+		case Driver::ControllerState_Cancel:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Cancel - the command was cancelled", ctrl->m_homeId );
+			std::cout << "ControllerState: Cancel" << endl;
+			break;
+		}
+		case Driver::ControllerState_Error:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Error - command invocation had error(s) and was aborted", ctrl->m_homeId );
+			std::cout << "ControllerState: Error" << endl;
+			break;
+		}
+		case Driver::ControllerState_Sleeping:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Sleeping - controller command is on a sleep queue wait for device", ctrl->m_homeId );
+			std::cout << "ControllerState: Sleeping" << endl;
+			break;
+		}
+		case Driver::ControllerState_Waiting:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Waiting - waiting for a user action", ctrl->m_homeId );
+			std::cout << "ControllerState: Waiting" << endl;
+			break;
+		}
+		case Driver::ControllerState_InProgress:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - InProgress - communicating with the other device", ctrl->m_homeId );
+			std::cout << "ControllerState: InProgress" << endl;
+			break;
+		}
+		case Driver::ControllerState_Completed:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Completed - command has completed successfully", ctrl->m_homeId );
+			std::cout << "ControllerState: Completed" << endl;
+			//ctrl->m_controllerBusy = false;
+			break;
+		}
+		case Driver::ControllerState_Failed:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Failed - command has failed", ctrl->m_homeId );
+			std::cout << "ControllerState: Failed" << endl;
+			//ctrl->m_controllerBusy = false;
+			break;
+		}
+		case Driver::ControllerState_NodeOK:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - NodeOK - the node is OK", ctrl->m_homeId );
+			std::cout << "ControllerState: NodeOk" << endl;
+			//ctrl->m_controllerBusy = false;
+
+			// Store Node State
+
+			break;
+		}
+		case Driver::ControllerState_NodeFailed:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - NodeFailed - the node has failed", ctrl->m_homeId );
+			std::cout << "ControllerState: NodeFailed" << endl;
+			//ctrl->m_controllerBusy = false;
+
+			// Store Node State
+
+			break;
+		}
+		default:
+		{
+			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - unknown response", ctrl->m_homeId );
+			std::cout << "ControllerState: Unknown" << endl;
+			//ctrl->m_controllerBusy = false;
+			break;
+		}
+	}
+
+	// Additional possible error information
+	switch (err) {
+		case Driver::ControllerError_None:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=None" );
+			break;
+		}
+		case Driver::ControllerError_ButtonNotFound:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Button Not Found" );
+			std::cout << "ControllerError: Button Not Found" << endl;
+			break;
+		}
+		case Driver::ControllerError_NodeNotFound:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Node Not Found" );
+			std::cout << "ControllerError: Node Not Found" << endl;
+			break;
+		}
+		case Driver::ControllerError_NotBridge:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Not a Bridge" );
+			std::cout << "ControllerError: Not a Bridge" << endl;
+			break;
+		}
+		case Driver::ControllerError_NotPrimary:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Not Primary Controller" );
+			std::cout << "ControllerError: Not Primary Controller" << endl;
+			break;
+		}
+		case Driver::ControllerError_IsPrimary:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Is Primary Controller" );
+			std::cout << "ControllerError: Is Primary Controller" << endl;
+			break;
+		}
+		case Driver::ControllerError_NotSUC:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Not Static Update Controller" );
+			std::cout << "ControllerError: Not Static Update Controller" << endl;
+			break;
+		}
+		case Driver::ControllerError_NotSecondary:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Not Secondary Controller" );
+			std::cout << "ControllerError: Not Secondary Controller" << endl;
+			break;
+		}
+		case Driver::ControllerError_NotFound:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Not Found" );
+			std::cout << "ControllerError: Not Found" << endl;
+			break;
+		}
+		case Driver::ControllerError_Busy:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Controller Busy" );
+			std::cout << "ControllerError: Busy" << endl;
+			break;
+		}
+		case Driver::ControllerError_Failed:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Failed" );
+			std::cout << "ControllerError: Failed" << endl;
+			break;
+		}
+		case Driver::ControllerError_Disabled:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Disabled" );
+			std::cout << "ControllerError: Disabled" << endl;
+			break;
+		}
+		case Driver::ControllerError_Overflow:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Overflow" );
+			std::cout << "ControllerError: Overflow" << endl;
+			break;
+		}
+		default:
+		{
+			//WriteLog( LogLevel_Debug, false, "Error=Unknown error (%d)", err );
+			std::cout << "ControllerError: Unknown error" << endl;
+			break;
+		}
+	}
+
+	pthread_mutex_unlock( &g_criticalSection );
+
+	// If the controller isn't busy anymore and we still got something in the queue, fire off the command now
+	/*if ( ctrl->m_controllerBusy == false )
+	{
+		if ( ! ctrl->m_cmd.empty() )
+		{
+			bool response;
+			m_cmdItem cmd;
+
+			cmd = ctrl->m_cmd.front();
+			ctrl->m_cmd.pop_front();
+
+			// Now start the BeginControllerCommand with the 2 supported options
+			switch( cmd.m_command ) {
+				case Driver::ControllerCommand_HasNodeFailed:
+				{
+					//ctrl->m_controllerBusy = true;
+					//WriteLog( LogLevel_Debug, true, "DomoZWave_HasNodeFailed: HomeId=%d Node=%d (Queued)", ctrl->m_homeId, cmd.m_nodeId );
+					response = Manager::Get()->BeginControllerCommand( ctrl->m_homeId, Driver::ControllerCommand_HasNodeFailed, OnControllerUpdate, ctrl, true, cmd.m_nodeId );
+		                        //WriteLog( LogLevel_Debug, false, "Return=%s", (response)?"CommandSend":"ControllerBusy" );
+					break;
+				}
+				case Driver::ControllerCommand_RequestNodeNeighborUpdate:
+				{
+					//ctrl->m_controllerBusy = true;
+					//WriteLog( LogLevel_Debug, true, "DomoZWave_RequestNodeNeighborUpdate: HomeId=%d Node=%d (Queued)", ctrl->m_homeId, cmd.m_nodeId );
+					response = Manager::Get()->BeginControllerCommand( ctrl->m_homeId, Driver::ControllerCommand_RequestNodeNeighborUpdate, OnControllerUpdate, ctrl, false, cmd.m_nodeId );
+		                        //WriteLog( LogLevel_Debug, false, "Return=%s", (response)?"CommandSend":"ControllerBusy" );
+					break;
+				}
+				default:
+				{
+					//WriteLog( LogLevel_Debug, true, "DomoZWave_OnControllerUpdate: HomeId=%d Node=%d (Queued)", ctrl->m_homeId, cmd.m_nodeId );
+					//WriteLog( LogLevel_Debug, false, "ERROR: Invalid Command %d", cmd.m_command );
+					break;
+				}
+			}
+		}
+	}*/
+}
+
 /******** DOSTUFF() *********************
  There is a separate instance of this function 
  for each connection.  It handles all communication
@@ -406,12 +650,9 @@ int main(int argc, char* argv[]) {
 				Socket new_sock;
 				while(server.accept(new_sock)) {
 					pthread_t thread;
-					//std::cout << new_sock.GetSock() << endl;
-					//segmentation fault here
 					int thread_sock2;
 					thread_sock2 = new_sock.GetSock();
-					//std::cout << thread_sock2 << endl;
-					if( pthread_create( &thread , NULL ,  process_commands ,(void*) thread_sock2) < 0) {
+					if( pthread_create( &thread , NULL ,  run_socket ,(void*) thread_sock2) < 0) {
 						throw std::runtime_error("Unable to create thread");
 					}
 					else {
@@ -446,8 +687,7 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void *process_commands(void* arg)
-{
+void *run_socket(void* arg) {
 	Socket thread_sock;
 	thread_sock.SetSock((int)arg);
 	while(true) {
@@ -455,319 +695,13 @@ void *process_commands(void* arg)
 			//get commands from the socket
 			std::string data;
 			thread_sock >> data;
-			//std::cout << data << endl;
+			
 			if(strcmp(data.c_str(), "") == 0){ //client closed the connection
 				std::cout << "Client closed the connection" << endl;
 				return 0;
 			}
 			
-			vector<string> v;
-			split(data, '~', v);
-			string result = "";
-			switch (s_mapStringCommands[trim(v[0].c_str())])
-			{
-				case AList:
-				{
-					string device;
-					for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-						NodeInfo* nodeInfo = *it;
-						int nodeID = nodeInfo->m_nodeId;
-						//This refreshed node could be cleaned up - I added the quick hack so I would get status
-						// or state changes that happened on the switch itself or due to another event / [rpcess
-						bool isRePolled = Manager::Get()->RefreshNodeInfo(g_homeId, nodeInfo->m_nodeId);
-						string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
-						string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
-						string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
-						string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
-												//The point of this was to help me figure out what the node values looked like
-						for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
-							string tempstr="";
-							Manager::Get()->GetValueAsString(*it5,&tempstr);                   
-							tempstr= "="+tempstr;
-							//hack to delimit values .. need to properly escape all values
-							nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
-						}
-
-						if (nodeName.size() == 0) nodeName = "Undefined";
-
-						if (nodeType != "Static PC Controller"  && nodeType != "") {
-							stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
-							ssNodeName << nodeName;
-							ssNodeId << nodeID;
-							ssNodeType << nodeType;
-							ssNodeZone << nodeZone;
-							ssNodeValue << nodeValue;
-							device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
-						}	
-					}
-					device = device.substr(0, device.size() - 1) + "\n";                           
-					printf("Sent Device List \n");
-					thread_sock << device;
-					break;
-				}
-				case Device:
-				{
-
-					if(v.size() != 4) {
-						throw ProtocolException(2, "Wrong number of arguments");
-					}
-					
-					int Node = 0;
-					int Level = 0;
-					string Option = "";
-					string err_message = "";
-
-					Level = lexical_cast<int>(v[2].c_str());
-					Node = lexical_cast<int>(v[1].c_str());
-					Option=v[3].c_str();
-					
-					if(!SetValue(g_homeId, Node, Level, err_message)){
-						thread_sock << err_message;
-					}
-					else{
-						stringstream ssNode, ssLevel;
-						ssNode << Node;
-						ssLevel << Level;
-						result = "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
-						thread_sock << result;
-					}
-					break;
-				}
-				case SetNode:
-				{
-					if(v.size() != 4) {
-						throw ProtocolException(2, "Wrong number of arguments");
-					}
-					int Node = 0;
-					string NodeName = "";
-					string NodeZone = "";
-					
-					Node = lexical_cast<int>(v[1].c_str());
-					NodeName = v[2].c_str();
-					NodeName = trim(NodeName);
-					NodeZone = v[3].c_str();
-					
-					pthread_mutex_lock(&g_criticalSection);
-					Manager::Get()->SetNodeName(g_homeId, Node, NodeName);
-					Manager::Get()->SetNodeLocation(g_homeId, Node, NodeZone);
-					pthread_mutex_unlock(&g_criticalSection);
-					
-					stringstream ssNode, ssName, ssZone;
-					ssNode << Node;
-					ssName << NodeName;
-					ssZone << NodeZone;
-					result = "MSG~ZWave Name set Node=" + ssNode.str() + " Name=" + ssName.str() + " Zone=" + ssZone.str() + "\n";
-					thread_sock << result;
-					
-					//save details to XML
-					Manager::Get()->WriteConfig(g_homeId);
-					break;
-				}
-				case SceneC:
-				{
-					if(v.size() < 3) {
-						throw ProtocolException(2, "Wrong number of arguments");
-					}
-					switch(s_mapStringCommands[trim(v[1].c_str())])
-					{
-						case Create:
-						{
-							string sclabel = trim(v[2].c_str());
-							if(int scid = Manager::Get()->CreateScene()) {
-								stringstream ssID;
-								ssID << scid;
-								Manager::Get()->SetSceneLabel(scid, sclabel);
-								result = "Scene created with name " + sclabel +" and scene_id " + ssID.str() + "\n";
-							}
-							thread_sock << result;
-							Manager::Get()->WriteConfig(g_homeId);
-							break;
-						}
-						case Add:
-						{
-							if(v.size() != 5) {
-								throw ProtocolException(2, "Wrong number of arguments");
-							}
-							uint8 numscenes = 0;
-							uint8 *sceneIds = new uint8[numscenes];
-							
-							if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-								throw ProtocolException(3, "No scenes created");
-							}
-							
-							stringstream ssNum;
-							ssNum << numscenes;
-							result = "numscenes " + ssNum.str() + "\n";
-							thread_sock << result;
-							
-							string sclabel = trim(v[2].c_str());
-							int scid=0;
-							int Node = lexical_cast<int>(v[3].c_str());
-							int Level = lexical_cast<int>(v[4].c_str());
-							
-							for(int i=0; i<numscenes; ++i) {
-								scid = sceneIds[i];
-								stringstream ssID;
-								ssID << scid;
-								result = "scid " + ssID.str() + "\n";
-								thread_sock << result;
-								if(sclabel != Manager::Get()->GetSceneLabel(scid)) {
-									continue;
-								}
-								result = "Found right scene\n";
-								thread_sock << result;
-								NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
-								for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
-									int id = (*vit).GetCommandClassId();
-									string vlabel = Manager::Get()->GetValueLabel( (*vit) );
-								
-									if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
-										continue;
-									}
-									result = "Add valueid/value to scene\n";
-									thread_sock << result;
-									Manager::Get()->AddSceneValue(scid, (*vit), Level);
-								}
-							}
-							Manager::Get()->WriteConfig(g_homeId);
-							break;
-						}
-						case Remove:
-						{
-							if(v.size() != 4) {
-								throw ProtocolException(2, "Wrong number of arguments");
-							}
-							uint8 numscenes = 0;
-							uint8 *sceneIds = new uint8[numscenes];
-							
-							if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-								throw ProtocolException(3, "No scenes created");
-							}
-							
-							stringstream ssNum;
-							ssNum << numscenes;
-							result = "numscenes " + ssNum.str() + "\n";
-							thread_sock << result;
-							
-							string sclabel = trim(v[2].c_str());
-							int scid=0;
-							int Node = lexical_cast<int>(v[3].c_str());
-							
-							for(int i=0; i<numscenes; ++i){
-								scid = sceneIds[i];
-								stringstream ssID;
-								ssID << scid;
-								result = "scid " + ssID.str() + "\n";
-								thread_sock << result;
-								if(sclabel != Manager::Get()->GetSceneLabel(scid)){
-									continue;
-								}
-								result = "Found right scene\n";
-								thread_sock << result;
-								NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
-								for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
-									int id = (*vit).GetCommandClassId();
-									string vlabel = Manager::Get()->GetValueLabel( (*vit) );
-								
-									if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
-										continue;
-									}
-									result = "Remove valueid from scene\n";
-									thread_sock << result;
-									Manager::Get()->RemoveSceneValue(scid, (*vit));
-								}
-							}
-							Manager::Get()->WriteConfig(g_homeId);
-							break;
-						}
-						case Activate:
-						{
-							string result = activateScene(v[2].c_str());
-							thread_sock << result;
-							break;
-						}
-						default:
-							throw ProtocolException(1, "Unknown Scene command");
-							break;
-					}
-					break;
-				}
-				case Cron:
-				{
-					//planning to add a google calendar add-in here.
-					//right now it will just update the sunrise and sunset times for today
-					//call zcron.sh from cron to enable this function
-					
-					time_t sunrise = 0, sunset = 0;
-					float lat, lon;
-					conf->GetLocation(lat, lon);
-					if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
-						/* stringstream ssSunrise;
-						ssSunrise << ctime(&sunrise);
-						stringstream ssSunset;
-						ssSunset << ctime(&sunset);
-						result = "sunrise @ " + ssSunrise.str();
-						result += "sunset @ " + ssSunset.str();
-						thread_sock << result; */
-						
-						Alarm sunriseAlarm;
-						Alarm sunsetAlarm;
-						sunriseAlarm.alarmtime = sunrise;
-						sunsetAlarm.alarmtime = sunset;
-						sunriseAlarm.description = "Sunrise";
-						sunsetAlarm.description = "Sunset";
-						
-						alarmlist.push_back(sunriseAlarm);
-						alarmlist.push_back(sunsetAlarm);
-					}
-					
-					alarmlist.sort();
-					alarmlist.unique();
-					
-					time_t now = time(NULL);
-					
-					while(!alarmlist.empty() && (alarmlist.front().alarmtime) <= now)
-					{alarmlist.pop_front();}
-					
-					for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
-						stringstream ssTime;
-						ssTime << ctime(&((*it).alarmtime));
-						std::cout << ssTime.str();
-					}
-					
-					if(!alarmlist.empty() && !alarmset && (alarmlist.front().alarmtime > now)) {
-						signal(SIGALRM, sigalrm_handler);   
-						alarm(alarmlist.front().alarmtime - now);
-						alarmset = true;
-					}
-					
-					break;
-				}
-				case Switch:
-				{
-					switchAtHome();
-					break;
-				}
-				case Test:
-				{
-					switchAtHome();
-					std::cout << atHome << endl;
-					string test = "";
-					(atHome)?test="true\n":test="false\n";
-					thread_sock << test;
-					break;
-				}
-				case AlarmList:
-					for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
-						stringstream ssTime;
-						ssTime << ctime(&(it->alarmtime));
-						thread_sock << ssTime.str();
-					}
-					break;
-				default:
-					throw ProtocolException(1, "Unknown command");
-					break;
-			}
+			thread_sock << process_commands(data);
 		}
 		catch (ProtocolException& e) {
 			string what = "ProtocolException: ";
@@ -782,6 +716,281 @@ void *process_commands(void* arg)
 			std::cout << "SocketException: " << e.what() << endl;
 		}
 	}
+}
+
+std::string process_commands(std::string data) {
+	vector<string> v;
+	split(data, '~', v);
+	string output = "";
+	switch (s_mapStringCommands[trim(v[0].c_str())])
+	{
+		case AList:
+		{
+			string device;
+			for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+				NodeInfo* nodeInfo = *it;
+				int nodeID = nodeInfo->m_nodeId;
+				
+				string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+				string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
+				string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
+				string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
+										//The point of this was to help me figure out what the node values looked like
+				for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
+					string tempstr="";
+					Manager::Get()->GetValueAsString(*it5,&tempstr);                   
+					tempstr= "="+tempstr;
+					//hack to delimit values .. need to properly escape all values
+					nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
+				}
+
+				if (nodeName.size() == 0) nodeName = "Undefined";
+
+				if (nodeType != "Static PC Controller"  && nodeType != "") {
+					stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
+					ssNodeName << nodeName;
+					ssNodeId << nodeID;
+					ssNodeType << nodeType;
+					ssNodeZone << nodeZone;
+					ssNodeValue << nodeValue;
+					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
+				}
+			}
+			device = device.substr(0, device.size() - 1) + "\n";                           
+			std::cout << "Sent Device List \n";
+			output += device;
+			break;
+		}
+		case Device:
+		{
+			if(v.size() != 4) {
+				throw ProtocolException(2, "Wrong number of arguments");
+			}
+			
+			int Node = 0;
+			int Level = 0;
+			string Option = "";
+			string err_message = "";
+
+			Level = lexical_cast<int>(v[2].c_str());
+			Node = lexical_cast<int>(v[1].c_str());
+			Option=v[3].c_str();
+			
+			if(!SetValue(g_homeId, Node, Level, err_message)){
+				output += err_message;
+			}
+			else{
+				stringstream ssNode, ssLevel;
+				ssNode << Node;
+				ssLevel << Level;
+				output += "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
+			}
+			break;
+		}
+		case SetNode:
+		{
+			if(v.size() != 4) {
+				throw ProtocolException(2, "Wrong number of arguments");
+			}
+			int Node = 0;
+			string NodeName = "";
+			string NodeZone = "";
+			
+			Node = lexical_cast<int>(v[1].c_str());
+			NodeName = trim(v[2].c_str());
+			NodeZone = trim(v[3].c_str());
+			
+			pthread_mutex_lock(&g_criticalSection);
+			Manager::Get()->SetNodeName(g_homeId, Node, NodeName);
+			Manager::Get()->SetNodeLocation(g_homeId, Node, NodeZone);
+			pthread_mutex_unlock(&g_criticalSection);
+			
+			stringstream ssNode, ssName, ssZone;
+			ssNode << Node;
+			ssName << NodeName;
+			ssZone << NodeZone;
+			output += "MSG~ZWave Name set Node=" + ssNode.str() + " Name=" + ssName.str() + " Zone=" + ssZone.str() + "\n";
+			
+			//save details to XML
+			Manager::Get()->WriteConfig(g_homeId);
+			break;
+		}
+		case SceneC:
+		{
+			if(v.size() < 3) {
+				throw ProtocolException(2, "Wrong number of arguments");
+			}
+			switch(s_mapStringCommands[trim(v[1].c_str())])
+			{
+				case Create:
+				{
+					string sclabel = trim(v[2].c_str());
+					if(int scid = Manager::Get()->CreateScene()) {
+						stringstream ssID;
+						ssID << scid;
+						Manager::Get()->SetSceneLabel(scid, sclabel);
+						output += "Scene created with name " + sclabel +" and scene_id " + ssID.str() + "\n";
+					}
+					Manager::Get()->WriteConfig(g_homeId);
+					break;
+				}
+				case Add:
+				{
+					if(v.size() != 5) {
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
+					uint8 numscenes = 0;
+					uint8 *sceneIds = new uint8[numscenes];
+					
+					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+						throw ProtocolException(3, "No scenes created");
+					}
+					
+					stringstream ssNum;
+					ssNum << numscenes;
+					output += "numscenes " + ssNum.str() + "\n";
+					
+					string sclabel = trim(v[2].c_str());
+					int scid=0;
+					int Node = lexical_cast<int>(v[3].c_str());
+					int Level = lexical_cast<int>(v[4].c_str());
+					
+					for(int i=0; i<numscenes; ++i) {
+						scid = sceneIds[i];
+						if(sclabel != Manager::Get()->GetSceneLabel(scid)) {
+							continue;
+						}
+						output += "Found right scene\n";
+						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
+						for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+							int id = (*vit).GetCommandClassId();
+							string vlabel = Manager::Get()->GetValueLabel( (*vit) );
+						
+							if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
+								continue;
+							}
+							output += "Add valueid/value to scene\n";
+							Manager::Get()->AddSceneValue(scid, (*vit), Level);
+						}
+					}
+					Manager::Get()->WriteConfig(g_homeId);
+					break;
+				}
+				case Remove:
+				{
+					if(v.size() != 4) {
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
+					uint8 numscenes = 0;
+					uint8 *sceneIds = new uint8[numscenes];
+					
+					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+						throw ProtocolException(3, "No scenes created");
+					}
+					
+					stringstream ssNum;
+					ssNum << numscenes;
+					output += "numscenes " + ssNum.str() + "\n";
+					
+					string sclabel = trim(v[2].c_str());
+					int scid=0;
+					int Node = lexical_cast<int>(v[3].c_str());
+					
+					for(int i=0; i<numscenes; ++i){
+						scid = sceneIds[i];
+						
+						if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+							continue;
+						}
+						output += "Found right scene\n";
+						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
+						for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+							int id = (*vit).GetCommandClassId();
+							string vlabel = Manager::Get()->GetValueLabel( (*vit) );
+						
+							if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
+								continue;
+							}
+							output += "Remove valueid from scene\n";
+							Manager::Get()->RemoveSceneValue(scid, (*vit));
+						}
+					}
+					Manager::Get()->WriteConfig(g_homeId);
+					break;
+				}
+				case Activate:
+				{
+					output += activateScene(v[2].c_str());
+					break;
+				}
+				default:
+					throw ProtocolException(1, "Unknown Scene command");
+					break;
+			}
+			break;
+		}
+		case Cron:
+		{
+			//planning to add a google calendar add-in here.
+			//right now it will just update the sunrise and sunset times for today
+			//call zcron.sh from cron to enable this function
+			
+			time_t sunrise = 0, sunset = 0;
+			float lat, lon;
+			conf->GetLocation(lat, lon);
+			if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
+				Alarm sunriseAlarm;
+				Alarm sunsetAlarm;
+				sunriseAlarm.alarmtime = sunrise;
+				sunsetAlarm.alarmtime = sunset;
+				sunriseAlarm.description = "Sunrise";
+				sunsetAlarm.description = "Sunset";
+				
+				alarmlist.push_back(sunriseAlarm);
+				alarmlist.push_back(sunsetAlarm);
+			}
+			
+			alarmlist.sort();
+			alarmlist.unique();
+			
+			time_t now = time(NULL);
+			
+			while(!alarmlist.empty() && (alarmlist.front().alarmtime) <= now)
+			{alarmlist.pop_front();}
+			
+			if(!alarmlist.empty() && !alarmset && (alarmlist.front().alarmtime > now)) {
+				signal(SIGALRM, sigalrm_handler);   
+				alarm(alarmlist.front().alarmtime - now);
+				alarmset = true;
+			}
+			
+			break;
+		}
+		case Switch:
+		{
+			output += switchAtHome();
+			break;
+		}
+		case Test:
+		{
+			string response = "false";
+			if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate))
+				response = "true";
+			output += response;
+			break;
+		}
+		case AlarmList:
+			for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
+				stringstream ssTime;
+				ssTime << ctime(&(it->alarmtime));
+				output += ssTime.str();
+			}
+			break;
+		default:
+			throw ProtocolException(1, "Unknown command");
+			break;
+	}
+	return output;
 }
 
 bool SetValue(int32 home, int32 node, int32 value, string& err_message)
@@ -872,26 +1081,28 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message)
 	return response;
 }
 
-void switchAtHome() {
+std::string switchAtHome() {
 	time_t sunrise = 0, sunset = 0;
 	float lat, lon;
 	conf->GetLocation(lat, lon);
+	std::string output = "";
 	if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
 		atHome = !atHome;
 		if(atHome) {
+			output += "Welcome home\n";
 			time_t now = time(NULL);
 			if(now > sunrise && now < sunset) {
 				// turn on the athome scene set by the user for the day
 				std::string dayScene;
 				conf->GetDayScene(dayScene);
 				try {
-					std::cout << activateScene(dayScene);
+					output += activateScene(dayScene);
 				}
 				catch (ProtocolException& e) {
-					string what = "ProtocolException: ";
+					std::string what = "ProtocolException: ";
 					what += e.what();
-					std::cout << what << endl;
-					std::cout << "No dayScene is set, set it in Config.ini" << endl;
+					output += what + "\n";
+					output += "No dayScene is set, set it in Config.ini\n";
 				}
 			}
 			else if(now > sunset) {
@@ -899,34 +1110,35 @@ void switchAtHome() {
 				std::string nightScene;
 				conf->GetNightScene(nightScene);
 				try {
-					std::cout << activateScene(nightScene);
+					output += activateScene(nightScene);
 				}
 				catch (ProtocolException& e) {
-					string what = "ProtocolException: ";
+					std::string what = "ProtocolException: ";
 					what += e.what();
-					std::cout << what << endl;
-					std::cout << "No nightScene is set, set it in Config.ini" << endl;
+					output += what + "\n";
+					output += "No nightScene is set, set it in Config.ini\n";
 				}
 			}
 		}
 		else {
-			// going somewhere, swicht off lights...
+			output += "Bye bye\n";
 			std::string awayScene;
 			conf->GetAwayScene(awayScene);
 			try {
-				std::cout << activateScene(awayScene);
+				output += activateScene(awayScene);
 			}
 			catch (ProtocolException& e) {
 				string what = "ProtocolException: ";
 				what += e.what();
-				std::cout << what << endl;
-				std::cout << "No awayScene is set, set it in Config.ini" << endl;
+				output += what + "\n";
+				output += "No awayScene is set, set it in Config.ini\n";
 			}
 		}
 	}
+	return output;
 }
 
-string activateScene(string sclabel) {
+std::string activateScene(string sclabel) {
 	uint8 numscenes = 0;
 	uint8 *sceneIds = new uint8[numscenes];
 	
