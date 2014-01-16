@@ -78,6 +78,7 @@ typedef struct {
 	uint32			m_homeId;
 	uint8			m_nodeId;
 	//string			commandclass;
+	time_t			m_LastSeen;
 	bool			m_polled;
 	list<ValueID>	m_values;
 } NodeInfo;
@@ -89,10 +90,13 @@ struct Alarm {
 	bool operator==(Alarm const &other)  { return alarmtime == other.alarmtime; }
 };
 
+static bool stopping = false;
+static Socket* server;
+static Configuration* conf;
+
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
 static bool atHome = true;
-static Configuration* conf;
 static bool alarmset = false;
 static list<Alarm> alarmlist;
 static list<NodeInfo*> g_nodes;
@@ -101,13 +105,14 @@ static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList, ControllerC, Cancel};
+enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList, ControllerC, Cancel, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
+enum DeviceOptions {Undefined_Option = 0, Polling};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
+static std::map<std::string, DeviceOptions> s_mapStringOptions;
 
-void create_string_maps()
-{
+void create_string_maps() {
 	s_mapStringCommands["ALIST"] = AList;
 	s_mapStringCommands["DEVICE"] = Device;
 	s_mapStringCommands["SETNODE"] = SetNode;
@@ -122,9 +127,12 @@ void create_string_maps()
 	s_mapStringCommands["ALARMLIST"] = AlarmList;
 	s_mapStringCommands["CONTROLLER"] = ControllerC;
 	s_mapStringCommands["CANCEL"] = Cancel;
+	s_mapStringCommands["EXIT"] = Exit;
 	
 	s_mapStringTriggers["Sunrise"] = Sunrise;
 	s_mapStringTriggers["Sunset"] = Sunset;
+	
+	s_mapStringOptions["Polling"] = Polling;	
 }
 
 //functions
@@ -133,6 +141,7 @@ std::string process_commands(std::string data);
 bool SetValue(int32 home, int32 node, int32 value, string& err_message);
 std::string switchAtHome();
 std::string activateScene(string sclabel);
+bool parse_option(int32 home, int32 node, std::string name, std::string value);
 void sigalrm_handler(int sig);
 
 //-----------------------------------------------------------------------------
@@ -194,6 +203,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 		{
 			// One of the node values has changed
 			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
+				nodeInfo->m_LastSeen = time( NULL );
 				for (list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
                     if ((*it) == _notification->GetValueID()) {
                         nodeInfo->m_values.erase(it);
@@ -248,7 +258,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 			// We have received an event from the node, caused by a
 			// basic_set or hail message.
 			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
-				nodeInfo = nodeInfo;            // placeholder for real action
+				nodeInfo->m_LastSeen = time( NULL );
 			}
 			break;
 		}
@@ -296,6 +306,9 @@ void OnNotification(Notification const* _notification, void* _context) {
 		case Notification::Type_NodeProtocolInfo:
 		case Notification::Type_NodeQueriesComplete:
 		{
+			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
+				nodeInfo->m_LastSeen = time( NULL );
+			}
 			break;
 		}
 		default:
@@ -306,8 +319,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 	pthread_mutex_unlock(&g_criticalSection);
 }
 
-void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err, void *ct )
-{
+void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err, void *ct ) {
 	//m_structCtrl *ctrl = (m_structCtrl *)ct;
 
 	// Possible ControllerState values:
@@ -541,6 +553,91 @@ void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err
 	}*/
 }
 
+//-----------------------------------------------------------------------------
+// Libwebsockets definitions
+//-----------------------------------------------------------------------------
+
+// struct for the thread data
+struct analyze_data_info {  
+    unsigned char *data;
+    struct libwebsocket *wsi;
+	size_t len;
+};
+
+// def thread count
+#define THREADS 1000
+
+// keep track of our threads
+static int current_thread = 0;  
+static pthread_t thread[THREADS];
+
+// method called by thread to analyze data
+void *analyzeThread(void *in) {
+    // get the data from our struct
+    struct analyze_data_info *info = (struct analyze_data_info*)in;
+
+    // store the data as a char
+    unsigned char *data = info->data;
+	size_t len = info->len;
+
+    // send the response
+    libwebsocket_write(info->wsi, data, len, LWS_WRITE_TEXT);
+
+    return NULL;
+}
+
+static int nullHttpCallback(struct libwebsocket_context *context,
+							struct libwebsocket *wsi,
+							enum libwebsocket_callback_reasons reason,
+							void *user, void *in, size_t len) {
+    return 0;
+}
+
+static int echoCallback(struct libwebsocket_context *context,
+									struct libwebsocket *wsi,
+									enum libwebsocket_callback_reasons reason,
+									void *user, void *in, size_t len) {
+	// reason for callback
+	switch (reason) {
+		case LWS_CALLBACK_ESTABLISHED:
+			printf("connection established\n");
+			break;
+
+		case LWS_CALLBACK_RECEIVE: {
+			// create a struct with the data
+			struct analyze_data_info ainfo;
+			ainfo.data = (unsigned char*)in;
+			ainfo.wsi = wsi;
+			ainfo.len = len;
+
+			// analyze what was sent (launch a thread to do so)
+			pthread_create(&thread[++current_thread], NULL, analyzeThread, (void *)&ainfo);
+
+			// log what we recieved and what we're going to send as a response.
+			printf("received data: %s\n", (char *) in);
+			break;
+		}
+	}
+	return 0;
+}
+
+// protocol types for websockets
+static struct libwebsocket_protocols protocols[] = {  
+    {
+        "http-only",
+        nullHttpCallback,
+        0
+    },
+    {
+        "echo",
+        echoCallback,
+        0
+    },
+    {
+        NULL, NULL, 0
+    }
+};
+
 /******** DOSTUFF() *********************
  There is a separate instance of this function 
  for each connection.  It handles all communication
@@ -548,32 +645,31 @@ void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err
  *****************************************/
 
 void split(const string& s, char c, vector<string>& v) {
-    string::size_type i = 0;
-    string::size_type j = s.find(c);
-    while (j != string::npos) {
-        v.push_back(s.substr(i, j - i));
-        i = ++j;
-        j = s.find(c, j);
-    }
+	string::size_type i = 0;
+	string::size_type j = s.find(c);
+	while (j != string::npos) {
+		v.push_back(s.substr(i, j - i));
+		i = ++j;
+		j = s.find(c, j);
+	}
 	v.push_back(s.substr(i, s.length()));
 }
 
 string trim(string s) {
-    return s.erase(s.find_last_not_of(" \n\r\t") + 1);
+	return s.erase(s.find_last_not_of(" \n\r\t") + 1);
 }
 
 template <typename T>
-T lexical_cast(const std::string& s)
-{
-    std::stringstream ss(s);
+T lexical_cast(const std::string& s) {
+	std::stringstream ss(s);
 
-    T result;
-    if ((ss >> result).fail() || !(ss >> std::ws).eof())
-    {
-        throw std::runtime_error("Bad cast");
-    }
+	T result;
+	if ((ss >> result).fail() || !(ss >> std::ws).eof())
+	{
+		throw std::runtime_error("Bad cast");
+	}
 
-    return result;
+	return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -582,6 +678,45 @@ T lexical_cast(const std::string& s)
 //-----------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
+	/*// server url will be ws://localhost:9000
+    int port = 9000;
+    const char *interface = NULL;
+    struct libwebsocket_context *context;
+
+    // we're not using ssl
+    const char *cert_path = NULL;
+    const char *key_path = NULL;
+
+    // no special options
+    int opts = 0;
+
+    // create connection struct
+    struct lws_context_creation_info info;
+    info.port = port;
+    info.iface = interface;
+    info.protocols = protocols;
+    info.extensions = NULL;
+    info.ssl_cert_filepath = cert_path;
+    info.ssl_private_key_filepath = key_path;
+    info.options = opts;
+
+    // create libwebsocket context representing this server
+    context = libwebsocket_create_context(&info);
+
+    // make sure it starts
+    if (context == NULL) {
+        fprintf(stderr, "libwebsocket init failed\n");
+        return -1;
+    }
+    printf("starting server...\n");
+
+    // infinite loop, to end this server send SIGTERM. (CTRL+C)
+    while (1) {
+        libwebsocket_service(context, 10);
+    }
+    libwebsocket_context_destroy(context);
+    return 0;*/
+
 	conf = new Configuration();
 	pthread_mutexattr_t mutexattr;
 
@@ -628,6 +763,8 @@ int main(int argc, char* argv[]) {
 
 		Driver::DriverData data;
 		Manager::Get()->GetDriverStatistics(g_homeId, &data);
+		
+		Manager::Get()->SetPollInterval(1000*60*15, false); //15 minutes
 
 		printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.m_SOFCnt, data.m_ACKWaiting, data.m_readAborts, data.m_badChecksum);
 		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
@@ -635,20 +772,20 @@ int main(int argc, char* argv[]) {
 		printf("***************************************************** \n");
 		printf("6004 ZWaveCommander Server \n");
 		
-		while(true) {
+		while(!stopping) {
 			try { // for all socket errors
-				Socket server;
-				if(!server.create()) {
+				server = new Socket();
+				if(!server->create()) {
 					throw SocketException ( "Could not create server socket." );
 				}
-				if(!server.bind(6004)) {
+				if(!server->bind(6004)) {
 					throw SocketException ( "Could not bind to port." );
 				}
-				if(!server.listen()) {
+				if(!server->listen()) {
 					throw SocketException ( "Could not listen to socket." );
 				}
 				Socket new_sock;
-				while(server.accept(new_sock)) {
+				while(server->accept(new_sock)) {
 					pthread_t thread;
 					int thread_sock2;
 					thread_sock2 = new_sock.GetSock();
@@ -747,13 +884,14 @@ std::string process_commands(std::string data) {
 				if (nodeName.size() == 0) nodeName = "Undefined";
 
 				if (nodeType != "Static PC Controller"  && nodeType != "") {
-					stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeValue;
+					stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeLastSeen, ssNodeValue;
 					ssNodeName << nodeName;
 					ssNodeId << nodeID;
 					ssNodeType << nodeType;
 					ssNodeZone << nodeZone;
+					ssNodeLastSeen << ctime(&(nodeInfo->m_LastSeen));
 					ssNodeValue << nodeValue;
-					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeValue.str() + "#";
+					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeLastSeen.str() + "~" + ssNodeValue.str() + "#";
 				}
 			}
 			device = device.substr(0, device.size() - 1) + "\n";                           
@@ -763,18 +901,16 @@ std::string process_commands(std::string data) {
 		}
 		case Device:
 		{
-			if(v.size() != 4) {
+			if(v.size() != 3) {
 				throw ProtocolException(2, "Wrong number of arguments");
 			}
 			
 			int Node = 0;
 			int Level = 0;
-			string Option = "";
 			string err_message = "";
 
-			Level = lexical_cast<int>(v[2].c_str());
 			Node = lexical_cast<int>(v[1].c_str());
-			Option=v[3].c_str();
+			Level = lexical_cast<int>(v[2].c_str());
 			
 			if(!SetValue(g_homeId, Node, Level, err_message)){
 				output += err_message;
@@ -789,21 +925,40 @@ std::string process_commands(std::string data) {
 		}
 		case SetNode:
 		{
-			if(v.size() != 4) {
+			if(v.size() != 5) {
 				throw ProtocolException(2, "Wrong number of arguments");
 			}
 			int Node = 0;
 			string NodeName = "";
 			string NodeZone = "";
+			string Options = "";
 			
 			Node = lexical_cast<int>(v[1].c_str());
 			NodeName = trim(v[2].c_str());
 			NodeZone = trim(v[3].c_str());
+			Options=trim(v[4].c_str());
 			
 			pthread_mutex_lock(&g_criticalSection);
 			Manager::Get()->SetNodeName(g_homeId, Node, NodeName);
 			Manager::Get()->SetNodeLocation(g_homeId, Node, NodeZone);
 			pthread_mutex_unlock(&g_criticalSection);
+			
+			if(!Options.empty()) {
+				vector<string> OptionList;
+				split(Options, '<>', OptionList);
+				
+				for(int i = 0; i < OptionList.size(); i++) {
+					std::size_t found = OptionList[i].find('=');
+					if (found!=std::string::npos) {
+						std::string name = OptionList[i].substr(0,found);
+						std::string value = OptionList[i].substr(found+1);
+						if(!parse_option(g_homeId, Node, name, value)) {
+							output += "Error while parsing options\n";
+							break;
+						}
+					}
+				}
+			}
 			
 			stringstream ssNode, ssName, ssZone;
 			ssNode << Node;
@@ -986,6 +1141,10 @@ std::string process_commands(std::string data) {
 				output += ssTime.str();
 			}
 			break;
+		case Exit:
+			stopping = true;
+			delete server;
+			break;
 		default:
 			throw ProtocolException(1, "Unknown command");
 			break;
@@ -993,8 +1152,7 @@ std::string process_commands(std::string data) {
 	return output;
 }
 
-bool SetValue(int32 home, int32 node, int32 value, string& err_message)
-{
+bool SetValue(int32 home, int32 node, int32 value, string& err_message) {
 	err_message = "";
 	bool bool_value;
 	int int_value;
@@ -1138,7 +1296,7 @@ std::string switchAtHome() {
 	return output;
 }
 
-std::string activateScene(string sclabel) {
+std::string activateScene(std::string sclabel) {
 	uint8 numscenes = 0;
 	uint8 *sceneIds = new uint8[numscenes];
 	
@@ -1159,6 +1317,32 @@ std::string activateScene(string sclabel) {
 		return "Activate scene "+sclabel+"\n";
 	}
 	throw ProtocolException(4, "Scene not found");
+}
+
+bool parse_option(int32 home, int32 node, std::string name, std::string value) {
+	switch(s_mapStringOptions[name])
+	{
+		case Polling:
+		{
+			std::cout << "case Polling\n";
+			if(lexical_cast<bool>(value)) {
+				std::cout << "case enable\n";
+				if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
+					for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
+						int id = (*it).GetCommandClassId();
+						if(id == COMMAND_CLASS_SENSOR_MULTILEVEL)
+						{
+							return Manager::Get()->EnablePoll( *it, 2 );
+						}
+					}
+				}
+			}
+			break;
+		}
+		default:
+		break;
+	}
+	return false;
 }
 
 void sigalrm_handler(int sig) {

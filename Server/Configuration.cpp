@@ -101,9 +101,8 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 	return true;
 }
 
-void Configuration::create_string_map()
-{
-    s_mapStringValues["lat"] = lat_n;
+void Configuration::create_string_map() {
+	s_mapStringValues["lat"] = lat_n;
 	s_mapStringValues["lon"] = lon_n;
 	s_mapStringValues["dayScene"] = dayScene_n;
 	s_mapStringValues["nightScene"] = nightScene_n;

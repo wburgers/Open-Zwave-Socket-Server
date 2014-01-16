@@ -18,8 +18,10 @@ Socket::Socket() :
 
 Socket::~Socket()
 {
-  if ( is_valid() )
-    ::close ( m_sock );
+	if ( is_valid() ) {
+		::shutdown ( m_sock, 2 );
+		::close ( m_sock );
+	}
 }
 
 bool Socket::create()
