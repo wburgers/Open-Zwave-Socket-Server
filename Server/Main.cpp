@@ -644,13 +644,13 @@ static struct libwebsocket_protocols protocols[] = {
  once a connnection has been established.
  *****************************************/
 
-void split(const string& s, char c, vector<string>& v) {
+void split(const string& s, const string& delimiter, vector<string>& v) {
 	string::size_type i = 0;
-	string::size_type j = s.find(c);
+	string::size_type j = s.find(delimiter);
 	while (j != string::npos) {
 		v.push_back(s.substr(i, j - i));
 		i = ++j;
-		j = s.find(c, j);
+		j = s.find(delimiter, j);
 	}
 	v.push_back(s.substr(i, s.length()));
 }
@@ -857,7 +857,7 @@ void *run_socket(void* arg) {
 
 std::string process_commands(std::string data) {
 	vector<string> v;
-	split(data, '~', v);
+	split(data, "~", v);
 	string output = "";
 	switch (s_mapStringCommands[trim(v[0].c_str())])
 	{
@@ -945,13 +945,13 @@ std::string process_commands(std::string data) {
 			
 			if(!Options.empty()) {
 				vector<string> OptionList;
-				split(Options, '<>', OptionList);
+				split(Options, "<>", OptionList);
 				
-				for(int i = 0; i < OptionList.size(); i++) {
-					std::size_t found = OptionList[i].find('=');
+				for(std::vector<string>::iterator it = OptionList.begin(); it != OptionList.end(); ++it) {
+					std::size_t found = (*it).find('=');
 					if (found!=std::string::npos) {
-						std::string name = OptionList[i].substr(0,found);
-						std::string value = OptionList[i].substr(found+1);
+						std::string name = (*it).substr(0,found);
+						std::string value = (*it).substr(found+1);
 						if(!parse_option(g_homeId, Node, name, value)) {
 							output += "Error while parsing options\n";
 							break;

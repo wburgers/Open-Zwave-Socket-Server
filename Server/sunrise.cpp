@@ -264,7 +264,7 @@ bool GetSunriseSunset(time_t &tSunrise,time_t &tSunset,float latitude,float long
 	tm.tm_isdst=-1;  
 
 	seconds = mktime(&tm);
-	int dst=tm.tm_isdst;
+	//int dst=tm.tm_isdst;
 
 	gmtime_r ( &seconds, &ptm );
 	int delta= ptm.tm_hour;
