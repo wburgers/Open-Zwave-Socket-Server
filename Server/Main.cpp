@@ -78,6 +78,7 @@ typedef struct {
 	uint32			m_homeId;
 	uint8			m_nodeId;
 	//string			commandclass;
+	uint8			basicmapping;
 	time_t			m_LastSeen;
 	bool			m_polled;
 	list<ValueID>	m_values;
@@ -107,10 +108,11 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 // Value-Defintions of the different String values
 enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList, ControllerC, Cancel, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
-enum DeviceOptions {Undefined_Option = 0, Polling};
+enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Polling};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
 static std::map<std::string, DeviceOptions> s_mapStringOptions;
+static std::map<string, int> MapCommandClassBasic;
 
 void create_string_maps() {
 	s_mapStringCommands["ALIST"] = AList;
@@ -132,16 +134,46 @@ void create_string_maps() {
 	s_mapStringTriggers["Sunrise"] = Sunrise;
 	s_mapStringTriggers["Sunset"] = Sunset;
 	
-	s_mapStringOptions["Polling"] = Polling;	
+	s_mapStringOptions["Name"] = Name;
+	s_mapStringOptions["Location"] = Location;
+	s_mapStringOptions["Level"] = Level;
+	s_mapStringOptions["Polling"] = Polling;
+	
+	MapCommandClassBasic["0x03|0x11"] = 0x94;
+	MapCommandClassBasic["0x03|0x12"] = 0x30;
+	MapCommandClassBasic["0x08|0x02"] = 0x40;
+	MapCommandClassBasic["0x08|0x03"] = 0x46;
+	MapCommandClassBasic["0x08|0x04"] = 0x43;
+	MapCommandClassBasic["0x08|0x05"] = 0x40;
+	MapCommandClassBasic["0x08|0x06"] = 0x40;
+	MapCommandClassBasic["0x09|0x01"] = 0x50;
+	MapCommandClassBasic["0x10"] = 0x25;
+	MapCommandClassBasic["0x11"] = 0x26;
+	MapCommandClassBasic["0x12|0x01"] = 0x25;
+	MapCommandClassBasic["0x12|0x02"] = 0x26;
+	MapCommandClassBasic["0x12|0x03"] = 0x28;
+	MapCommandClassBasic["0x12|0x04"] = 0x29;
+	MapCommandClassBasic["0x13|0x01"] = 0x28;
+	MapCommandClassBasic["0x13|0x02"] = 0x29;
+	MapCommandClassBasic["0x16|0x01"] = 0x39;
+	MapCommandClassBasic["0x20"] = 0x30;
+	MapCommandClassBasic["0x21"] = 0x31;
+	MapCommandClassBasic["0x30"] = 0x35;
+	MapCommandClassBasic["0x31|0x01"] = 0x32;
+	MapCommandClassBasic["0x40|0x01"] = 0x62;
+	MapCommandClassBasic["0x40|0x02"] = 0x62;
+	MapCommandClassBasic["0x40|0x03"] = 0x62;
+	MapCommandClassBasic["0xa1"] = 0x71;
 }
 
 //functions
 void *run_socket(void* arg);
 std::string process_commands(std::string data);
-bool SetValue(int32 home, int32 node, int32 value, string& err_message);
+bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string& err_message);
 std::string switchAtHome();
 std::string activateScene(string sclabel);
-bool parse_option(int32 home, int32 node, std::string name, std::string value);
+bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message);
+bool try_map_basic(int32 home, int32 node);
 void sigalrm_handler(int sig);
 
 //-----------------------------------------------------------------------------
@@ -300,10 +332,35 @@ void OnNotification(Notification const* _notification, void* _context) {
 			break;
 		}
 
+		case Notification::Type_NodeProtocolInfo:
+		{
+			char buffer[10];
+			uint32 const homeId = _notification->GetHomeId();
+			uint8 const nodeId = _notification->GetNodeId();
+			if(NodeInfo* nodeInfo = GetNodeInfo(homeId, nodeId)) {
+				
+				uint8 generic = Manager::Get()->GetNodeGeneric(homeId , nodeId);
+				uint8 specific = Manager::Get()->GetNodeSpecific(homeId, nodeId);
+				
+				snprintf(buffer, 10, "0x%02X|0x%02X", generic, specific);
+				if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
+					nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+				}
+				else {
+					// We didn't find a Generic+Specifc in the table, now we check
+					// for Generic only
+					snprintf(buffer, 10, "0x%02X", generic);
+
+					// Check if we have a mapping in our map table
+					if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
+						nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+					}
+				}
+			}
+		}
 		case Notification::Type_DriverReset:
 		case Notification::Type_Notification:
 		case Notification::Type_NodeNaming:
-		case Notification::Type_NodeProtocolInfo:
 		case Notification::Type_NodeQueriesComplete:
 		{
 			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
@@ -649,7 +706,7 @@ void split(const string& s, const string& delimiter, vector<string>& v) {
 	string::size_type j = s.find(delimiter);
 	while (j != string::npos) {
 		v.push_back(s.substr(i, j - i));
-		i = ++j;
+		i = j += delimiter.length();
 		j = s.find(delimiter, j);
 	}
 	v.push_back(s.substr(i, s.length()));
@@ -753,7 +810,9 @@ int main(int argc, char* argv[]) {
 
     // Now we just wait for the driver to become ready, and then write out the loaded config.
     // In a normal app, we would be handling notifications and building a UI for the user.
-
+	
+	Manager::Get()->SetPollInterval(1000*60*15, false); //15 minutes
+	
     pthread_cond_wait(&initCond, &initMutex);
 
     if (!g_initFailed) {
@@ -763,8 +822,6 @@ int main(int argc, char* argv[]) {
 
 		Driver::DriverData data;
 		Manager::Get()->GetDriverStatistics(g_homeId, &data);
-		
-		Manager::Get()->SetPollInterval(1000*60*15, false); //15 minutes
 
 		printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.m_SOFCnt, data.m_ACKWaiting, data.m_readAborts, data.m_badChecksum);
 		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
@@ -901,13 +958,13 @@ std::string process_commands(std::string data) {
 		}
 		case Device:
 		{
-			if(v.size() != 3) {
+			/*if(v.size() != 3) {
 				throw ProtocolException(2, "Wrong number of arguments");
 			}
 			
 			int Node = 0;
 			int Level = 0;
-			string err_message = "";
+			std::string err_message = "";
 
 			Node = lexical_cast<int>(v[1].c_str());
 			Level = lexical_cast<int>(v[2].c_str());
@@ -921,53 +978,48 @@ std::string process_commands(std::string data) {
 				ssLevel << Level;
 				output += "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
 			}
-			break;
+			break;*/
 		}
 		case SetNode:
 		{
-			if(v.size() != 5) {
+			if(v.size() != 3) {
 				throw ProtocolException(2, "Wrong number of arguments");
 			}
 			int Node = 0;
-			string NodeName = "";
-			string NodeZone = "";
 			string Options = "";
 			
 			Node = lexical_cast<int>(v[1].c_str());
-			NodeName = trim(v[2].c_str());
-			NodeZone = trim(v[3].c_str());
-			Options=trim(v[4].c_str());
-			
-			pthread_mutex_lock(&g_criticalSection);
-			Manager::Get()->SetNodeName(g_homeId, Node, NodeName);
-			Manager::Get()->SetNodeLocation(g_homeId, Node, NodeZone);
-			pthread_mutex_unlock(&g_criticalSection);
+			Options=trim(v[2].c_str());
 			
 			if(!Options.empty()) {
 				vector<string> OptionList;
 				split(Options, "<>", OptionList);
+				bool save = false;
 				
 				for(std::vector<string>::iterator it = OptionList.begin(); it != OptionList.end(); ++it) {
+					std::cout << (*it) << endl;
 					std::size_t found = (*it).find('=');
 					if (found!=std::string::npos) {
 						std::string name = (*it).substr(0,found);
 						std::string value = (*it).substr(found+1);
-						if(!parse_option(g_homeId, Node, name, value)) {
+						std::string err_message = "";
+						if(!parse_option(g_homeId, Node, name, value, save, err_message)) {
 							output += "Error while parsing options\n";
+							output += err_message;
 							break;
 						}
 					}
 				}
+				if (save) {
+					//save details to XML
+					Manager::Get()->WriteConfig(g_homeId);
+				}
 			}
 			
-			stringstream ssNode, ssName, ssZone;
+			stringstream ssNode;
 			ssNode << Node;
-			ssName << NodeName;
-			ssZone << NodeZone;
-			output += "MSG~ZWave Name set Node=" + ssNode.str() + " Name=" + ssName.str() + " Zone=" + ssZone.str() + "\n";
+			output += "MSG~ZWave Name set Node=" + ssNode.str() + "\n";
 			
-			//save details to XML
-			Manager::Get()->WriteConfig(g_homeId);
 			break;
 		}
 		case SceneC:
@@ -1118,7 +1170,6 @@ std::string process_commands(std::string data) {
 				alarm(alarmlist.front().alarmtime - now);
 				alarmset = true;
 			}
-			
 			break;
 		}
 		case Switch:
@@ -1128,10 +1179,11 @@ std::string process_commands(std::string data) {
 		}
 		case Test:
 		{
-			string response = "false";
+			/*string response = "false";
 			if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate))
 				response = "true";
-			output += response;
+			output += response;*/
+			
 			break;
 		}
 		case AlarmList:
@@ -1152,7 +1204,7 @@ std::string process_commands(std::string data) {
 	return output;
 }
 
-bool SetValue(int32 home, int32 node, int32 value, string& err_message) {
+bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string& err_message) {
 	err_message = "";
 	bool bool_value;
 	int int_value;
@@ -1165,6 +1217,9 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message) {
 		// Find the correct instance
 		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it ) {
 			int id = (*it).GetCommandClassId();
+			if (id != cmdclass) {
+				continue;
+			}
 			//int inst = (*it).GetInstance();
 			string label = Manager::Get()->GetValueLabel( (*it) );
 
@@ -1189,12 +1244,19 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message) {
 					}
 					break;
 				}
+				case COMMAND_CLASS_WAKE_UP:
+				{
+					if(label != "Wake-up Interval") {
+						continue;
+					}
+					break;
+				}
 				default:
 				{
 					continue;
 				}
 			}
-
+			
 			if ( ValueID::ValueType_Bool == (*it).GetType() ) {
 				bool_value = (bool)value;
 				response = Manager::Get()->SetValue( *it, bool_value );
@@ -1226,7 +1288,7 @@ bool SetValue(int32 home, int32 node, int32 value, string& err_message) {
 		}
 
 		if ( cmdfound == false ) {
-			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL | ";
+			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL\n";
 			return false;
 		}
 	}
@@ -1263,7 +1325,7 @@ std::string switchAtHome() {
 					output += "No dayScene is set, set it in Config.ini\n";
 				}
 			}
-			else if(now > sunset) {
+			else {
 				// turn on the athome scene set by the user for the evening/night
 				std::string nightScene;
 				conf->GetNightScene(nightScene);
@@ -1319,28 +1381,116 @@ std::string activateScene(std::string sclabel) {
 	throw ProtocolException(4, "Scene not found");
 }
 
-bool parse_option(int32 home, int32 node, std::string name, std::string value) {
+bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message) {
+	err_message = "";
 	switch(s_mapStringOptions[name])
 	{
+		case Name:
+		{
+			pthread_mutex_lock(&g_criticalSection);
+			Manager::Get()->SetNodeName(home, node, value);
+			pthread_mutex_unlock(&g_criticalSection);
+			save = true;
+			return true;
+			break;
+		}
+		case Location:
+		{
+			pthread_mutex_lock(&g_criticalSection);
+			Manager::Get()->SetNodeLocation(home, node, value);
+			pthread_mutex_unlock(&g_criticalSection);
+			save = true;
+			return true;
+			break;
+		}
+		case Level:
+		{
+			uint8 cmdclass = COMMAND_CLASS_SWITCH_MULTILEVEL;
+			return SetValue(home, node, lexical_cast<int>(value), cmdclass, err_message);
+			break;
+		}
 		case Polling:
 		{
-			std::cout << "case Polling\n";
-			if(lexical_cast<bool>(value)) {
-				std::cout << "case enable\n";
-				if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
-					for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
-						int id = (*it).GetCommandClassId();
-						if(id == COMMAND_CLASS_SENSOR_MULTILEVEL)
+			bool found = false;
+			if(Manager::Get()->GetNodeBasic( home, node ) < 0x03) {
+				err_message += "Node is a controller\n";
+				return false;
+			}
+			if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
+				uint8 cmdclass = 0;
+				if(nodeInfo->basicmapping > 0 || try_map_basic(home, node)) {
+					cmdclass = nodeInfo->basicmapping;
+					std::cout << "mapped to " << (int) cmdclass << endl;
+				}
+				else {
+					cmdclass = COMMAND_CLASS_BASIC;
+					std::cout << "mapped to BASIC" << endl;
+				}
+				
+				// Mark the basic command class values for polling
+				for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it){
+					if((*it).GetCommandClassId() == cmdclass) {
+						// It works fine, EXCEPT for MULTILEVEL, then we need to ignore all except the first one
+						if((*it).GetCommandClassId() == COMMAND_CLASS_SWITCH_MULTILEVEL) {
+							if((*it).GetIndex() != 0) {
+								continue;
+							}
+						}
+						if(lexical_cast<bool>(value)) {
+							if(!Manager::Get()->EnablePoll(*it)) {
+								err_message += "Could not enable polling for this value\n";
+								return false;
+							}
+						}
+						else {
+							if(!Manager::Get()->DisablePoll(*it)) {
+								err_message += "Could not disable polling for this value\n";
+								return false;
+							}
+						}
+						if(!found)
 						{
-							return Manager::Get()->EnablePoll( *it, 2 );
+							found = true;
 						}
 					}
 				}
+				if(!found) {
+					err_message += "Node does not have COMMAND_CLASS_BASIC\n";
+					return false;
+				}
 			}
+			save = true;
+			return true;
 			break;
 		}
 		default:
 		break;
+	}
+	return false;
+}
+
+bool try_map_basic(int32 home, int32 node) {
+	char buffer[10];
+	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {					
+		uint8 generic = Manager::Get()->GetNodeGeneric(home, node);
+		uint8 specific = Manager::Get()->GetNodeSpecific(home, node);			
+		
+		snprintf(buffer, 10, "0x%02X|0x%02X", generic, specific);
+		if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
+			nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+			return true;
+		}
+		else {
+			// We didn't find a Generic+Specifc in the table, now we check
+			// for Generic only
+			snprintf(buffer, 10, "0x%02X", generic);
+
+			// Check if we have a mapping in our map table
+			if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
+				nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+				return true;
+			}
+		}
 	}
 	return false;
 }
