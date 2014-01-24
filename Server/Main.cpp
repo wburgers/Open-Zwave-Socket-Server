@@ -108,7 +108,7 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 // Value-Defintions of the different String values
 enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList, ControllerC, Cancel, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
-enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Polling};
+enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Polling, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
 static std::map<std::string, DeviceOptions> s_mapStringOptions;
@@ -138,6 +138,7 @@ void create_string_maps() {
 	s_mapStringOptions["Location"] = Location;
 	s_mapStringOptions["Level"] = Level;
 	s_mapStringOptions["Polling"] = Polling;
+	s_mapStringOptions["Battery report"] = Battery_report;
 	
 	MapCommandClassBasic["0x03|0x11"] = 0x94;
 	MapCommandClassBasic["0x03|0x12"] = 0x30;
@@ -182,9 +183,9 @@ void sigalrm_handler(int sig);
 //-----------------------------------------------------------------------------
 
 NodeInfo* GetNodeInfo(uint32 const homeId, uint8 const nodeId) {
-	for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 		NodeInfo* nodeInfo = *it;
-		if ((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId)) {
+		if((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId)) {
 			return nodeInfo;
 		}
 	}
@@ -195,7 +196,7 @@ NodeInfo* GetNodeInfo(uint32 const homeId, uint8 const nodeId) {
 NodeInfo* GetNodeInfo(Notification const* notification) {
 	uint32 const homeId = notification->GetHomeId();
 	uint8 const nodeId = notification->GetNodeId();
-	return GetNodeInfo( homeId, nodeId );
+	return GetNodeInfo(homeId, nodeId);
 }
 
 //-----------------------------------------------------------------------------
@@ -236,8 +237,8 @@ void OnNotification(Notification const* _notification, void* _context) {
 			// One of the node values has changed
 			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
 				nodeInfo->m_LastSeen = time( NULL );
-				for (list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
-                    if ((*it) == _notification->GetValueID()) {
+				for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
+                    if((*it) == _notification->GetValueID()) {
                         nodeInfo->m_values.erase(it);
                         break;
                     }
@@ -276,7 +277,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 			uint8 const nodeId = _notification->GetNodeId();
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				NodeInfo* nodeInfo = *it;
-				if ((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId )) {
+				if((nodeInfo->m_homeId == homeId) && (nodeInfo->m_nodeId == nodeId)) {
 					g_nodes.erase(it);
 					delete nodeInfo;
 					break;
@@ -721,7 +722,7 @@ T lexical_cast(const std::string& s) {
 	std::stringstream ss(s);
 
 	T result;
-	if ((ss >> result).fail() || !(ss >> std::ws).eof())
+	if((ss >> result).fail() || !(ss >> std::ws).eof())
 	{
 		throw std::runtime_error("Bad cast");
 	}
@@ -735,45 +736,6 @@ T lexical_cast(const std::string& s) {
 //-----------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-	/*// server url will be ws://localhost:9000
-    int port = 9000;
-    const char *interface = NULL;
-    struct libwebsocket_context *context;
-
-    // we're not using ssl
-    const char *cert_path = NULL;
-    const char *key_path = NULL;
-
-    // no special options
-    int opts = 0;
-
-    // create connection struct
-    struct lws_context_creation_info info;
-    info.port = port;
-    info.iface = interface;
-    info.protocols = protocols;
-    info.extensions = NULL;
-    info.ssl_cert_filepath = cert_path;
-    info.ssl_private_key_filepath = key_path;
-    info.options = opts;
-
-    // create libwebsocket context representing this server
-    context = libwebsocket_create_context(&info);
-
-    // make sure it starts
-    if (context == NULL) {
-        fprintf(stderr, "libwebsocket init failed\n");
-        return -1;
-    }
-    printf("starting server...\n");
-
-    // infinite loop, to end this server send SIGTERM. (CTRL+C)
-    while (1) {
-        libwebsocket_service(context, 10);
-    }
-    libwebsocket_context_destroy(context);
-    return 0;*/
-
 	conf = new Configuration();
 	pthread_mutexattr_t mutexattr;
 
@@ -815,7 +777,7 @@ int main(int argc, char* argv[]) {
 	
     pthread_cond_wait(&initCond, &initMutex);
 
-    if (!g_initFailed) {
+    if(!g_initFailed) {
 	
 		create_string_maps();
 		Manager::Get()->WriteConfig(g_homeId);
@@ -846,7 +808,7 @@ int main(int argc, char* argv[]) {
 					pthread_t thread;
 					int thread_sock2;
 					thread_sock2 = new_sock.GetSock();
-					if( pthread_create( &thread , NULL ,  run_socket ,(void*) thread_sock2) < 0) {
+					if(pthread_create(&thread , NULL ,  run_socket ,(void*) thread_sock2) < 0) {
 						throw std::runtime_error("Unable to create thread");
 					}
 					else {
@@ -879,6 +841,46 @@ int main(int argc, char* argv[]) {
 	Options::Destroy();
 	pthread_mutex_destroy(&g_criticalSection);
 	return 0;
+}
+
+void *websockets_main(void* arg) {
+	// server url will be ws://localhost:9000
+    int port = 9000;
+    const char *interface = NULL;
+    struct libwebsocket_context *context;
+
+    // we're not using ssl
+    const char *cert_path = NULL;
+    const char *key_path = NULL;
+
+    // no special options
+    int opts = 0;
+
+    // create connection struct
+    struct lws_context_creation_info info;
+    info.port = port;
+    info.iface = interface;
+    info.protocols = protocols;
+    info.extensions = NULL;
+    info.ssl_cert_filepath = cert_path;
+    info.ssl_private_key_filepath = key_path;
+    info.options = opts;
+
+    // create libwebsocket context representing this server
+    context = libwebsocket_create_context(&info);
+
+    // make sure it starts
+    if(context == NULL) {
+        fprintf(stderr, "libwebsocket init failed\n");
+        return -1;
+    }
+    printf("starting server...\n");
+
+    // infinite loop, to end this server send SIGTERM. (CTRL+C)
+    while (1) {
+        libwebsocket_service(context, 10);
+    }
+    libwebsocket_context_destroy(context);
 }
 
 void *run_socket(void* arg) {
@@ -921,7 +923,7 @@ std::string process_commands(std::string data) {
 		case AList:
 		{
 			string device;
-			for (list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				NodeInfo* nodeInfo = *it;
 				int nodeID = nodeInfo->m_nodeId;
 				
@@ -930,7 +932,7 @@ std::string process_commands(std::string data) {
 				string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
 				string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
 										//The point of this was to help me figure out what the node values looked like
-				for (list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
+				for(list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
 					string tempstr="";
 					Manager::Get()->GetValueAsString(*it5,&tempstr);                   
 					tempstr= "="+tempstr;
@@ -938,9 +940,10 @@ std::string process_commands(std::string data) {
 					nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
 				}
 
-				if (nodeName.size() == 0) nodeName = "Undefined";
+				if(nodeName.size() == 0)
+					nodeName = "Undefined";
 
-				if (nodeType != "Static PC Controller"  && nodeType != "") {
+				if(nodeType != "Static PC Controller" && nodeType != "") {
 					stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeLastSeen, ssNodeValue;
 					ssNodeName << nodeName;
 					ssNodeId << nodeID;
@@ -999,7 +1002,7 @@ std::string process_commands(std::string data) {
 				for(std::vector<string>::iterator it = OptionList.begin(); it != OptionList.end(); ++it) {
 					std::cout << (*it) << endl;
 					std::size_t found = (*it).find('=');
-					if (found!=std::string::npos) {
+					if(found!=std::string::npos) {
 						std::string name = (*it).substr(0,found);
 						std::string value = (*it).substr(found+1);
 						std::string err_message = "";
@@ -1010,7 +1013,7 @@ std::string process_commands(std::string data) {
 						}
 					}
 				}
-				if (save) {
+				if(save) {
 					//save details to XML
 					Manager::Get()->WriteConfig(g_homeId);
 				}
@@ -1069,7 +1072,7 @@ std::string process_commands(std::string data) {
 						}
 						output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
-						for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+						for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
 							int id = (*vit).GetCommandClassId();
 							string vlabel = Manager::Get()->GetValueLabel( (*vit) );
 						
@@ -1111,7 +1114,7 @@ std::string process_commands(std::string data) {
 						}
 						output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
-						for (list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+						for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
 							int id = (*vit).GetCommandClassId();
 							string vlabel = Manager::Get()->GetValueLabel( (*vit) );
 						
@@ -1145,7 +1148,7 @@ std::string process_commands(std::string data) {
 			time_t sunrise = 0, sunset = 0;
 			float lat, lon;
 			conf->GetLocation(lat, lon);
-			if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
+			if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
 				Alarm sunriseAlarm;
 				Alarm sunsetAlarm;
 				sunriseAlarm.alarmtime = sunrise;
@@ -1204,7 +1207,7 @@ std::string process_commands(std::string data) {
 	return output;
 }
 
-bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string& err_message) {
+bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string label, std::string& err_message) {
 	err_message = "";
 	bool bool_value;
 	int int_value;
@@ -1213,71 +1216,39 @@ bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string& 
 	bool response;
 	bool cmdfound = false;
 	
-	if ( NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
+	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
 		// Find the correct instance
-		for ( list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it ) {
+		for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
 			int id = (*it).GetCommandClassId();
-			if (id != cmdclass) {
+			if(id != cmdclass) {
 				continue;
 			}
-			//int inst = (*it).GetInstance();
-			string label = Manager::Get()->GetValueLabel( (*it) );
 
-			switch ( id )
-			{
-				case COMMAND_CLASS_SWITCH_BINARY:
-				{
-					// label="Switch" is mandatory, else it isn't a switch
-					if ( label == "Switch" ) {
-						// If it is a binary CommandClass, then we only allow 0 (off) or 255 (on)
-						if ( value > 0 && value < 255 ) {
-							continue;
-						}
-					}
-					break;
-				}
-				case COMMAND_CLASS_SWITCH_MULTILEVEL:
-				{
-					// label="Level" is mandatory, else it isn't a dimmer type device
-					if ( label != "Level" ) {
-						continue;
-					}
-					break;
-				}
-				case COMMAND_CLASS_WAKE_UP:
-				{
-					if(label != "Wake-up Interval") {
-						continue;
-					}
-					break;
-				}
-				default:
-				{
-					continue;
-				}
+			if(label != Manager::Get()->GetValueLabel(*it)) {
+				continue;
 			}
 			
-			if ( ValueID::ValueType_Bool == (*it).GetType() ) {
+			if(ValueID::ValueType_Bool == (*it).GetType()) {
 				bool_value = (bool)value;
 				response = Manager::Get()->SetValue( *it, bool_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_Byte == (*it).GetType() ) {
+			else if(ValueID::ValueType_Byte == (*it).GetType()) {
 				uint8_value = (uint8)value;
 				response = Manager::Get()->SetValue( *it, uint8_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_Short == (*it).GetType() ) {
+			else if(ValueID::ValueType_Short == (*it).GetType()) {
 				uint16_value = (uint16)value;
 				response = Manager::Get()->SetValue( *it, uint16_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_Int == (*it).GetType() ) {
+			else if(ValueID::ValueType_Int == (*it).GetType()) {
 				int_value = value;
 				response = Manager::Get()->SetValue( *it, int_value );
 				cmdfound = true;
 			}
-			else if ( ValueID::ValueType_List == (*it).GetType() ) {
+			else if(ValueID::ValueType_List == (*it).GetType()) {
 				response = Manager::Get()->SetValue( *it, value );
 				cmdfound = true;
 			}
@@ -1287,7 +1258,7 @@ bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string& 
 			}
 		}
 
-		if ( cmdfound == false ) {
+		if(!cmdfound) {
 			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL\n";
 			return false;
 		}
@@ -1306,7 +1277,7 @@ std::string switchAtHome() {
 	float lat, lon;
 	conf->GetLocation(lat, lon);
 	std::string output = "";
-	if (GetSunriseSunset(sunrise,sunset,lat,lon)) {
+	if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
 		atHome = !atHome;
 		if(atHome) {
 			output += "Welcome home\n";
@@ -1406,7 +1377,7 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		case Level:
 		{
 			uint8 cmdclass = COMMAND_CLASS_SWITCH_MULTILEVEL;
-			return SetValue(home, node, lexical_cast<int>(value), cmdclass, err_message);
+			return SetValue(home, node, lexical_cast<int>(value), cmdclass, "Level", err_message);
 			break;
 		}
 		case Polling:
@@ -1462,6 +1433,12 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 			save = true;
 			return true;
 			break;
+		}
+		case Battery_report:
+		{
+			uint8 cmdclass = COMMAND_CLASS_CONFIGURATION;
+			save = true;
+			return SetValue(home, node, lexical_cast<int>(value), cmdclass, "Send unsolicited battery report on wakeup", err_message);
 		}
 		default:
 		break;
