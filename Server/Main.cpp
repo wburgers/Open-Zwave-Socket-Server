@@ -168,6 +168,7 @@ void create_string_maps() {
 }
 
 //functions
+void *websockets_main(void* arg);
 void *run_socket(void* arg);
 std::string process_commands(std::string data);
 bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string& err_message);
@@ -675,6 +676,8 @@ static int echoCallback(struct libwebsocket_context *context,
 			printf("received data: %s\n", (char *) in);
 			break;
 		}
+		default:
+		break;
 	}
 	return 0;
 }
@@ -791,6 +794,15 @@ int main(int argc, char* argv[]) {
 		printf("***************************************************** \n");
 		printf("6004 ZWaveCommander Server \n");
 		
+		//start the websocket in a new thread
+		pthread_t websocket_thread;
+		if(pthread_create(&websocket_thread , NULL ,  websockets_main ,NULL) < 0) {
+			throw std::runtime_error("Unable to create thread");
+		}
+		else {
+			std::cout<< "Websocket starting" << endl;
+		}
+		
 		while(!stopping) {
 			try { // for all socket errors
 				server = new Socket();
@@ -872,7 +884,7 @@ void *websockets_main(void* arg) {
     // make sure it starts
     if(context == NULL) {
         fprintf(stderr, "libwebsocket init failed\n");
-        return -1;
+        return 0;
     }
     printf("starting server...\n");
 
