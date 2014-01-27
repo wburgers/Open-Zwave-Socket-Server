@@ -108,7 +108,7 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 // Value-Defintions of the different String values
 enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList, ControllerC, Cancel, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
-enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Polling, Battery_report};
+enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
 static std::map<std::string, DeviceOptions> s_mapStringOptions;
@@ -138,6 +138,7 @@ void create_string_maps() {
 	s_mapStringOptions["Location"] = Location;
 	s_mapStringOptions["Level"] = Level;
 	s_mapStringOptions["Polling"] = Polling;
+	s_mapStringOptions["Wake-up Interval"] = Wake_up_Interval;
 	s_mapStringOptions["Battery report"] = Battery_report;
 	
 	MapCommandClassBasic["0x03|0x11"] = 0x94;
@@ -1445,6 +1446,12 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 			save = true;
 			return true;
 			break;
+		}
+		case Wake_up_Interval:
+		{
+			uint8 cmdclass = COMMAND_CLASS_WAKE_UP;
+			save = true;
+			return SetValue(home, node, lexical_cast<int>(value), cmdclass, name, err_message);
 		}
 		case Battery_report:
 		{
