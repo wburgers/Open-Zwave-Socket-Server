@@ -6,7 +6,7 @@
         <script type="text/javascript">
             $(document).ready(function() {
                 window.WebSocket = window.WebSocket || window.MozWebSocket; 
-                var websocket = new WebSocket('ws://openzwave-server-ip:9000', 'open-zwave');
+                var websocket = new WebSocket('ws://openzwave-server-ip:6005', 'open-zwave');
                 websocket.onopen = function () {
                     $('h1').html('Connected!');
                 };
