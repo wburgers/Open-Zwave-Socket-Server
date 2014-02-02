@@ -106,7 +106,7 @@ static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, Device, SetNode, SceneC, Create, Add, Remove, Activate, Cron, Switch, Test, AlarmList, ControllerC, Cancel, Exit};
+enum Commands {Undefined_command = 0, AList, SetNode, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
@@ -116,19 +116,19 @@ static std::map<string, int> MapCommandClassBasic;
 
 void create_string_maps() {
 	s_mapStringCommands["ALIST"] = AList;
-	s_mapStringCommands["DEVICE"] = Device;
 	s_mapStringCommands["SETNODE"] = SetNode;
 	s_mapStringCommands["SCENE"] = SceneC;
 	s_mapStringCommands["CREATE"] = Create;
 	s_mapStringCommands["ADD"] = Add;
 	s_mapStringCommands["REMOVE"] = Remove;
 	s_mapStringCommands["ACTIVATE"] = Activate;
-	s_mapStringCommands["CRON"] = Cron;
-	s_mapStringCommands["SWITCH"] = Switch;
-	s_mapStringCommands["TEST"] = Test;
-	s_mapStringCommands["ALARMLIST"] = AlarmList;
 	s_mapStringCommands["CONTROLLER"] = ControllerC;
 	s_mapStringCommands["CANCEL"] = Cancel;
+	s_mapStringCommands["CRON"] = Cron;
+	s_mapStringCommands["SWITCH"] = Switch;
+	s_mapStringCommands["POLLINTERVAL"] = PollInterval;
+	s_mapStringCommands["ALARMLIST"] = AlarmList;
+	s_mapStringCommands["TEST"] = Test;
 	s_mapStringCommands["EXIT"] = Exit;
 	
 	s_mapStringTriggers["Sunrise"] = Sunrise;
@@ -635,13 +635,27 @@ static pthread_t thread[THREADS];
 void *analyzeThread(void *in) {
     // get the data from our struct
     struct analyze_data_info *info = (struct analyze_data_info*)in;
-
-    // store the data as a char
-    unsigned char *data = info->data;
-	size_t len = info->len;
+	
+	std::string command = (char*) info->data;
+	std::string response;
+	try {
+		response = process_commands(command);
+	}
+	catch (ProtocolException& e) {
+		string what = "ProtocolException: ";
+		what += e.what();
+		what += "\n";
+		response = what;
+	}
+	catch (std::exception const& e) {
+		std::cout << "Exception: " << e.what() << endl;
+	}
+	catch (SocketException& e) {
+		std::cout << "SocketException: " << e.what() << endl;
+	}
 
     // send the response
-    libwebsocket_write(info->wsi, data, len, LWS_WRITE_TEXT);
+    libwebsocket_write(info->wsi, (unsigned char *)response.c_str(), response.length(), LWS_WRITE_TEXT);
 
     return NULL;
 }
@@ -653,7 +667,7 @@ static int nullHttpCallback(struct libwebsocket_context *context,
     return 0;
 }
 
-static int echoCallback(struct libwebsocket_context *context,
+static int open_zwaveCallback(struct libwebsocket_context *context,
 									struct libwebsocket *wsi,
 									enum libwebsocket_callback_reasons reason,
 									void *user, void *in, size_t len) {
@@ -662,7 +676,6 @@ static int echoCallback(struct libwebsocket_context *context,
 		case LWS_CALLBACK_ESTABLISHED:
 			printf("connection established\n");
 			break;
-
 		case LWS_CALLBACK_RECEIVE: {
 			// create a struct with the data
 			struct analyze_data_info ainfo;
@@ -691,8 +704,8 @@ static struct libwebsocket_protocols protocols[] = {
         0
     },
     {
-        "echo",
-        echoCallback,
+        "open-zwave",
+        open_zwaveCallback,
         0
     },
     {
@@ -777,7 +790,7 @@ int main(int argc, char* argv[]) {
     // Now we just wait for the driver to become ready, and then write out the loaded config.
     // In a normal app, we would be handling notifications and building a UI for the user.
 	
-	Manager::Get()->SetPollInterval(1000*60*15, false); //15 minutes
+	Manager::Get()->SetPollInterval(1000*60*30, false); //default to 30 minutes
 	
     pthread_cond_wait(&initCond, &initMutex);
 
@@ -945,12 +958,15 @@ std::string process_commands(std::string data) {
 				string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
 				string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
 										//The point of this was to help me figure out what the node values looked like
-				for(list<ValueID>::iterator it5 = nodeInfo->m_values.begin(); it5 != nodeInfo->m_values.end(); ++it5) {
+				for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
 					string tempstr="";
-					Manager::Get()->GetValueAsString(*it5,&tempstr);                   
+					Manager::Get()->GetValueAsString(*vit,&tempstr);
 					tempstr= "="+tempstr;
 					//hack to delimit values .. need to properly escape all values
-					nodeValue+="<>"+ Manager::Get()->GetValueLabel(*it5) +tempstr;
+					if(vit != nodeInfo->m_values.begin()) {
+						nodeValue += "<>";
+					}
+					nodeValue += Manager::Get()->GetValueLabel(*vit) +tempstr;
 				}
 
 				if(nodeName.size() == 0)
@@ -962,7 +978,7 @@ std::string process_commands(std::string data) {
 					ssNodeId << nodeID;
 					ssNodeType << nodeType;
 					ssNodeZone << nodeZone;
-					ssNodeLastSeen << ctime(&(nodeInfo->m_LastSeen));
+					ssNodeLastSeen << trim(ctime(&(nodeInfo->m_LastSeen)));
 					ssNodeValue << nodeValue;
 					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeLastSeen.str() + "~" + ssNodeValue.str() + "#";
 				}
@@ -971,30 +987,6 @@ std::string process_commands(std::string data) {
 			std::cout << "Sent Device List \n";
 			output += device;
 			break;
-		}
-		case Device:
-		{
-			/*if(v.size() != 3) {
-				throw ProtocolException(2, "Wrong number of arguments");
-			}
-			
-			int Node = 0;
-			int Level = 0;
-			std::string err_message = "";
-
-			Node = lexical_cast<int>(v[1].c_str());
-			Level = lexical_cast<int>(v[2].c_str());
-			
-			if(!SetValue(g_homeId, Node, Level, err_message)){
-				output += err_message;
-			}
-			else{
-				stringstream ssNode, ssLevel;
-				ssNode << Node;
-				ssLevel << Level;
-				output += "MSG~ZWave Node=" + ssNode.str() + " Level=" + ssLevel.str() + "\n";
-			}
-			break;*/
 		}
 		case SetNode:
 		{
@@ -1152,6 +1144,17 @@ std::string process_commands(std::string data) {
 			}
 			break;
 		}
+		case ControllerC:
+		{
+			switch(s_mapStringCommands[trim(v[1].c_str())])
+			{
+				case Add:
+				case Remove:
+				case Cancel:
+				default:
+					break;
+			}
+		}
 		case Cron:
 		{
 			//planning to add a google calendar add-in here.
@@ -1193,6 +1196,21 @@ std::string process_commands(std::string data) {
 			output += switchAtHome();
 			break;
 		}
+		case PollInterval:
+		{
+			if(v.size() != 2) {
+				throw ProtocolException(2, "Wrong number of arguments");
+			}
+			int interval = lexical_cast<int>(v[1].c_str()); //get the interval in minutes
+			Manager::Get()->SetPollInterval(1000*60*interval, false);
+		}
+		case AlarmList:
+			for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
+				stringstream ssTime;
+				ssTime << ctime(&(it->alarmtime));
+				output += ssTime.str();
+			}
+			break;
 		case Test:
 		{
 			/*string response = "false";
@@ -1202,13 +1220,6 @@ std::string process_commands(std::string data) {
 			
 			break;
 		}
-		case AlarmList:
-			for(list<Alarm>::iterator it = alarmlist.begin(); it!=alarmlist.end(); it++) {
-				stringstream ssTime;
-				ssTime << ctime(&(it->alarmtime));
-				output += ssTime.str();
-			}
-			break;
 		case Exit:
 			stopping = true;
 			delete server;
@@ -1420,8 +1431,14 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 								continue;
 							}
 						}
-						if(lexical_cast<bool>(value)) {
+						if(lexical_cast<int>(value) == 1) {
 							if(!Manager::Get()->EnablePoll(*it)) {
+								err_message += "Could not enable polling for this value\n";
+								return false;
+							}
+						}
+						else if(lexical_cast<int>(value) >= 2) {
+							if(!Manager::Get()->EnablePoll(*it, 2)) {
 								err_message += "Could not enable polling for this value\n";
 								return false;
 							}
