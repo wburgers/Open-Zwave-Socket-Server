@@ -21,6 +21,42 @@
                     websocket.send($('input').val());
                     $('input').val('');
                 });
+				if(navigator.geolocation) {
+					navigator.geolocation.getCurrentPosition(
+						function(position) {
+							// Log that this is the initial position.
+							console.log("Initial Position Found");
+							websocket.send("NEW_CLIENT~"+position.coords.latitude+"~"+position.coords.longitude);
+						},
+						function(error) {
+							console.log("Something went wrong: ", error);
+						},
+						{
+							timeout: (5 * 1000),
+							maximumAge: (1000 * 60 * 15),
+							enableHighAccuracy: true
+						}
+					);
+					var positionTimer = navigator.geolocation.watchPosition(
+						function(position) {
+							// Log that a newer, perhaps more accurate
+							// position has been found.
+							console.log("Newer Position Found");
+							websocket.send("UPDATE_CLIENT~"+position.coords.latitude+"~"+position.coords.longitude);
+						}
+					);
+
+					// If the position hasn't updated within 5 minutes, stop
+					// monitoring the position for changes.
+					setTimeout(
+						function(){
+							// Clear the position watcher.
+							navigator.geolocation.clearWatch(positionTimer);
+						},
+						(1000 * 60 * 5)
+					);
+				}
+				websocket.send('ALIST');
             });
         </script>
         </head>

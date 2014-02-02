@@ -34,7 +34,7 @@ LIBS = $(wildcard ../../../lib/linux/*.a) $(wildcard ../../../lib/*.a)
 all: test
 
 lib:
-	$(MAKE) -C ../../../build/linux
+	$(MAKE) -C ../../../build
 
 Socket: Socket.o
 	$(LD) $(CFLAGS) Socket.cpp -o Socket.o
