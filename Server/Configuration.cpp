@@ -6,7 +6,7 @@
 #include <sstream>
 #include <map>
 
-enum contents {Undefined = 0, lat_n, lon_n, dayScene_n, nightScene_n, awayScene_n};
+enum contents {Undefined = 0, tcp_port_n, ws_port_n, lat_n, lon_n, dayScene_n, nightScene_n, awayScene_n};
 static std::map<std::string, contents> s_mapStringValues;
 
 template <typename T>
@@ -21,7 +21,14 @@ T lexical_cast(const std::string& s) {
 	return result;
 }
 
-Configuration::Configuration() : conf_ini_location("./cpp/examples/linux/server/Config.ini"), dayScene(""), nightScene(""), awayScene("") {
+Configuration::Configuration() :	conf_ini_location("./cpp/examples/linux/server/Config.ini"), 
+									tcp_port(0),
+									ws_port(0),
+									lat(0.0),
+									lon(0.0),
+									dayScene(""),
+									nightScene(""),
+									awayScene("") {
 	create_string_map();
 	std::ifstream conffile;
 	if(open_filestream(conffile))
@@ -75,6 +82,12 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 	try {
 		switch(s_mapStringValues[name])
 		{
+			case tcp_port_n:
+				tcp_port = lexical_cast<int>(value);
+				break;
+			case ws_port_n:
+				ws_port = lexical_cast<int>(value);
+				break;
 			case lat_n:
 				lat = lexical_cast<float>(value);
 				break;
@@ -102,6 +115,8 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 }
 
 void Configuration::create_string_map() {
+	s_mapStringValues["tcp_port"] = tcp_port_n;
+	s_mapStringValues["ws_port"] = ws_port_n;
 	s_mapStringValues["lat"] = lat_n;
 	s_mapStringValues["lon"] = lon_n;
 	s_mapStringValues["dayScene"] = dayScene_n;
@@ -109,7 +124,26 @@ void Configuration::create_string_map() {
 	s_mapStringValues["awayScene"] = awayScene_n;
 }
 
+bool Configuration::GetTCPPort(int &port_) {
+	if(tcp_port == 0) {
+		return false;
+	}
+	port_ = tcp_port;
+	return true;
+}
+
+bool Configuration::GetWSPort(int &port_) {
+	if(ws_port == 0) {
+		return false;
+	}
+	port_ = ws_port;
+	return true;
+}
+
 bool Configuration::GetLocation(float &lat_, float &lon_) {
+	if(lat == 0.0 || lon == 0.0) {
+		return false;
+	}
 	lat_ = lat;
 	lon_ = lon;
 	return true;

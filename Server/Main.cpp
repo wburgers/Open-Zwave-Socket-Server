@@ -795,7 +795,6 @@ int main(int argc, char* argv[]) {
     pthread_cond_wait(&initCond, &initMutex);
 
     if(!g_initFailed) {
-	
 		create_string_maps();
 		Manager::Get()->WriteConfig(g_homeId);
 
@@ -806,7 +805,6 @@ int main(int argc, char* argv[]) {
 		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
 		printf("Dropped: %d Retries: %d\n", data.m_dropped, data.m_retries);
 		printf("***************************************************** \n");
-		printf("6004 ZWaveCommander Server \n");
 		
 		//start the websocket in a new thread
 		pthread_t websocket_thread;
@@ -817,13 +815,21 @@ int main(int argc, char* argv[]) {
 			std::cout<< "Websocket starting" << endl;
 		}
 		
+		int port;
+		
+		if(!conf->GetTCPPort(port)) {
+			std::cerr << "There is no TCP port set in Config.ini, please specify one and try again.\n";
+			return 0;
+		}
+		std::cout << "Starting TCP server on port: " << port << endl;
+		
 		while(!stopping) {
 			try { // for all socket errors
 				server = new Socket();
 				if(!server->create()) {
 					throw SocketException ( "Could not create server socket." );
 				}
-				if(!server->bind(6004)) {
+				if(!server->bind(port)) {
 					throw SocketException ( "Could not bind to port." );
 				}
 				if(!server->listen()) {
@@ -870,43 +876,46 @@ int main(int argc, char* argv[]) {
 }
 
 void *websockets_main(void* arg) {
-	// server url will be ws://localhost:9000
-    int port = 9000;
-    const char *interface = NULL;
-    struct libwebsocket_context *context;
+	int port;
+	if(!conf->GetWSPort(port)) {
+		std::cerr << "There is no WS port set in Config.ini, please specify one and try again.\n";
+		return 0;
+	}
+	const char *interface = NULL;
+	struct libwebsocket_context *context;
 
-    // we're not using ssl
-    const char *cert_path = NULL;
-    const char *key_path = NULL;
+	// we're not using ssl
+	const char *cert_path = NULL;
+	const char *key_path = NULL;
 
-    // no special options
-    int opts = 0;
+	// no special options
+	int opts = 0;
 
-    // create connection struct
-    struct lws_context_creation_info info;
-    info.port = port;
-    info.iface = interface;
-    info.protocols = protocols;
-    info.extensions = NULL;
-    info.ssl_cert_filepath = cert_path;
-    info.ssl_private_key_filepath = key_path;
-    info.options = opts;
+	// create connection struct
+	struct lws_context_creation_info info;
+	info.port = port;
+	info.iface = interface;
+	info.protocols = protocols;
+	info.extensions = NULL;
+	info.ssl_cert_filepath = cert_path;
+	info.ssl_private_key_filepath = key_path;
+	info.options = opts;
 
-    // create libwebsocket context representing this server
-    context = libwebsocket_create_context(&info);
+	// create libwebsocket context representing this server
+	context = libwebsocket_create_context(&info);
 
-    // make sure it starts
-    if(context == NULL) {
-        fprintf(stderr, "libwebsocket init failed\n");
-        return 0;
-    }
-    printf("starting server...\n");
+	// make sure it starts
+	if(context == NULL) {
+		std::cerr << "libwebsocket init failed\n";
+		return 0;
+	}
+	std::cout << "starting websocket server...\n";
 
-    // infinite loop, to end this server send SIGTERM. (CTRL+C)
-    while (1) {
-        libwebsocket_service(context, 10);
-    }
-    libwebsocket_context_destroy(context);
+	// infinite loop, to end this server send SIGTERM. (CTRL+C)
+	while (1) {
+		libwebsocket_service(context, 10);
+	}
+	libwebsocket_context_destroy(context);
 }
 
 void *run_socket(void* arg) {
@@ -1299,8 +1308,11 @@ bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string l
 std::string switchAtHome() {
 	time_t sunrise = 0, sunset = 0;
 	float lat, lon;
-	conf->GetLocation(lat, lon);
 	std::string output = "";
+	if(!conf->GetLocation(lat, lon)) {
+		output += "Could not get the location from Config.ini\n";
+		return output;
+	}
 	if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
 		atHome = !atHome;
 		if(atHome) {

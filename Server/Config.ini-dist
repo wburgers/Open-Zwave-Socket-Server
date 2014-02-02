@@ -1,3 +1,5 @@
+tcp_port=6004
+ws_port=6005
 lat=52.371967
 lon=4.895782
 dayScene=Off
