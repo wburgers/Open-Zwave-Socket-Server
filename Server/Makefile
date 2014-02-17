@@ -22,11 +22,11 @@ DEBUG_LDFLAGS   := -g
 CFLAGS  := -c $(DEBUG_CFLAGS)
 LDFLAGS := $(DEBUG_LDFLAGS)
 
-INCLUDES	:= -I ../../../src -I ../../../src/command_classes/ -I ../../../src/value_classes/ \
-        	-I ../../../src/platform/ -I ../../../h/platform/unix -I ../../../tinyxml/ \
-		-I ../../../hidapi/hidapi/
+INCLUDES	:= -I ../../src -I ../../src/command_classes/ -I ../../src/value_classes/ \
+        	-I ../../src/platform/ -I ../../h/platform/unix -I ../../tinyxml/ \
+		-I ../../hidapi/hidapi/
 
-LIBS = $(wildcard ../../../lib/linux/*.a) $(wildcard ../../../lib/*.a) 
+LIBS = $(wildcard ../../lib/linux/*.a) $(wildcard ../../lib/*.a) $(wildcard ../../build/*.a)
 
 %.o : %.cpp
 	$(CXX) $(CFLAGS) $(INCLUDES) -o $@ $<
@@ -34,7 +34,7 @@ LIBS = $(wildcard ../../../lib/linux/*.a) $(wildcard ../../../lib/*.a)
 all: test
 
 lib:
-	$(MAKE) -C ../../../build
+	$(MAKE) -C ../../build
 
 Socket: Socket.o
 	$(LD) $(CFLAGS) Socket.cpp -o Socket.o

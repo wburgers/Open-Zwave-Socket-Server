@@ -21,7 +21,7 @@ T lexical_cast(const std::string& s) {
 	return result;
 }
 
-Configuration::Configuration() :	conf_ini_location("./cpp/examples/linux/server/Config.ini"), 
+Configuration::Configuration() :	conf_ini_location("./cpp/examples/server/Config.ini"), 
 									tcp_port(0),
 									ws_port(0),
 									lat(0.0),

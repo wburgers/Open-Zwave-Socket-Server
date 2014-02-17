@@ -74,6 +74,9 @@
 #include "Main.h"
 using namespace OpenZWave;
 
+//-----------------------------------------------------------------------------
+// OpenZwave NodeInfo struct
+//-----------------------------------------------------------------------------
 typedef struct {
 	uint32			m_homeId;
 	uint8			m_nodeId;
@@ -84,12 +87,41 @@ typedef struct {
 	list<ValueID>	m_values;
 } NodeInfo;
 
+//-----------------------------------------------------------------------------
+// Alarms in this Open-Zwave server have a time and a description
+//-----------------------------------------------------------------------------
 struct Alarm {
 	time_t			alarmtime;
 	string			description;
 	bool operator<(Alarm const &other)  { return alarmtime < other.alarmtime; }
 	bool operator==(Alarm const &other)  { return alarmtime == other.alarmtime; }
 };
+
+//-----------------------------------------------------------------------------
+// LibWebSockets messages definitions
+//-----------------------------------------------------------------------------
+struct a_message {
+	void *payload;
+	size_t len;
+};
+
+#define MAX_MESSAGE_QUEUE 32
+
+static struct a_message ringbuffer[MAX_MESSAGE_QUEUE];
+static int ringbuffer_head = 0;
+
+static list<struct libwebsocket*> g_wsis;
+struct libwebsocket_context *context;
+
+/*struct WSClient {
+	int id;
+	float lat, lon;
+	bool operator==(WSClient const &other) { return id == other.id;}
+};*/
+
+//static int nextClientID = 0;
+//static bool notificationList_empty = true;
+//static pthread_mutex_t g_notificationListMutex;
 
 static bool stopping = false;
 static Socket* server;
@@ -108,7 +140,7 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 // Value-Defintions of the different String values
 enum Commands {Undefined_command = 0, AList, SetNode, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
-enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Polling, Wake_up_Interval, Battery_report};
+enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
 static std::map<std::string, DeviceOptions> s_mapStringOptions;
@@ -137,6 +169,7 @@ void create_string_maps() {
 	s_mapStringOptions["Name"] = Name;
 	s_mapStringOptions["Location"] = Location;
 	s_mapStringOptions["Level"] = Level;
+	s_mapStringOptions["Thermostat Setpoint"] = Thermostat_Setpoint;
 	s_mapStringOptions["Polling"] = Polling;
 	s_mapStringOptions["Wake-up Interval"] = Wake_up_Interval;
 	s_mapStringOptions["Battery report"] = Battery_report;
@@ -172,7 +205,7 @@ void create_string_maps() {
 void *websockets_main(void* arg);
 void *run_socket(void* arg);
 std::string process_commands(std::string data);
-bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string& err_message);
+bool SetValue(int32 home, int32 node, double value, uint8 cmdclass, std::string& err_message);
 std::string switchAtHome();
 std::string activateScene(string sclabel);
 bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message);
@@ -183,7 +216,6 @@ void sigalrm_handler(int sig);
 // <GetNodeInfo>
 // Callback that is triggered when a value, group or node changes
 //-----------------------------------------------------------------------------
-
 NodeInfo* GetNodeInfo(uint32 const homeId, uint8 const nodeId) {
 	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 		NodeInfo* nodeInfo = *it;
@@ -205,7 +237,6 @@ NodeInfo* GetNodeInfo(Notification const* notification) {
 // <OnNotification>
 // Callback that is triggered when a value, group or node changes
 //-----------------------------------------------------------------------------
-
 void OnNotification(Notification const* _notification, void* _context) {
 	// Must do this inside a critical section to avoid conflicts with the main thread
 	pthread_mutex_lock(&g_criticalSection);
@@ -247,6 +278,24 @@ void OnNotification(Notification const* _notification, void* _context) {
                 }
 				nodeInfo->m_values.push_back(_notification->GetValueID());
 				//Todo: clean up this update. This was a fast way to update the status
+				
+				//test for notifications
+				std::string WSnotification = "Notification: ValueChanged";
+				std::cout << "Adding notification to message list\n";
+				if (ringbuffer[ringbuffer_head].payload)
+					free(ringbuffer[ringbuffer_head].payload);
+				
+				ringbuffer[ringbuffer_head].payload = malloc(WSnotification.length());
+				ringbuffer[ringbuffer_head].len = WSnotification.length();
+				memcpy((char *)ringbuffer[ringbuffer_head].payload, WSnotification.c_str(), WSnotification.length());
+				if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1))
+					ringbuffer_head = 0;
+				else
+					ringbuffer_head++;
+				
+				for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
+					libwebsocket_callback_on_writable(context, (*it));
+				}
 			}
 			break;
 		}
@@ -254,8 +303,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 		case Notification::Type_Group:
 		{
 			// One of the node's association groups has changed
-			if( NodeInfo* nodeInfo = GetNodeInfo( _notification ) )
-			{
+			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
 				nodeInfo = nodeInfo;            // placeholder for real action
 			}
 			break;
@@ -617,49 +665,6 @@ void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err
 // Libwebsockets definitions
 //-----------------------------------------------------------------------------
 
-// struct for the thread data
-struct analyze_data_info {  
-    unsigned char *data;
-    struct libwebsocket *wsi;
-	size_t len;
-};
-
-// def thread count
-#define THREADS 1000
-
-// keep track of our threads
-static int current_thread = 0;  
-static pthread_t thread[THREADS];
-
-// method called by thread to analyze data
-void *analyzeThread(void *in) {
-    // get the data from our struct
-    struct analyze_data_info *info = (struct analyze_data_info*)in;
-	
-	std::string command = (char*) info->data;
-	std::string response;
-	try {
-		response = process_commands(command);
-	}
-	catch (ProtocolException& e) {
-		string what = "ProtocolException: ";
-		what += e.what();
-		what += "\n";
-		response = what;
-	}
-	catch (std::exception const& e) {
-		std::cout << "Exception: " << e.what() << endl;
-	}
-	catch (SocketException& e) {
-		std::cout << "SocketException: " << e.what() << endl;
-	}
-
-    // send the response
-    libwebsocket_write(info->wsi, (unsigned char *)response.c_str(), response.length(), LWS_WRITE_TEXT);
-
-    return NULL;
-}
-
 static int nullHttpCallback(struct libwebsocket_context *context,
 							struct libwebsocket *wsi,
 							enum libwebsocket_callback_reasons reason,
@@ -667,28 +672,108 @@ static int nullHttpCallback(struct libwebsocket_context *context,
     return 0;
 }
 
-static int open_zwaveCallback(struct libwebsocket_context *context,
-									struct libwebsocket *wsi,
-									enum libwebsocket_callback_reasons reason,
-									void *user, void *in, size_t len) {
+struct per_session_data__open_zwave {
+	int ringbuffer_tail;
+};
+
+static int open_zwaveCallback(	struct libwebsocket_context *context,
+								struct libwebsocket *wsi,
+								enum libwebsocket_callback_reasons reason,
+								void *user, void *in, size_t len) {
+	int n;
+	struct per_session_data__open_zwave *pss = (struct per_session_data__open_zwave *)user;
+	
 	// reason for callback
-	switch (reason) {
+	switch(reason) {
 		case LWS_CALLBACK_ESTABLISHED:
+		{
+			pss->ringbuffer_tail = ringbuffer_head;
 			printf("connection established\n");
+			g_wsis.push_back(wsi);
 			break;
+		}
 		case LWS_CALLBACK_RECEIVE: {
-			// create a struct with the data
-			struct analyze_data_info ainfo;
-			ainfo.data = (unsigned char*)in;
-			ainfo.wsi = wsi;
-			ainfo.len = len;
+			std::string command = (char*) in;
+			std::string response;
+			try {
+				response = process_commands(command);
+			}
+			catch (ProtocolException& e) {
+				string what = "ProtocolException: ";
+				what += e.what();
+				what += "\n";
+				response = what;
+			}
+			catch (std::exception const& e) {
+				std::cout << "Exception: " << e.what() << endl;
+			}
+			catch (SocketException& e) {
+				std::cout << "SocketException: " << e.what() << endl;
+			}
 
-			// analyze what was sent (launch a thread to do so)
-			pthread_create(&thread[++current_thread], NULL, analyzeThread, (void *)&ainfo);
+			// send the response
+			libwebsocket_write(wsi, (unsigned char *)response.c_str(), response.length(), LWS_WRITE_TEXT);
 
-			// log what we recieved and what we're going to send as a response.
-			printf("received data: %s\n", (char *) in);
+			// log what we recieved.
+			printf("received data: %s\n", (char*) in);
 			break;
+		}
+		case LWS_CALLBACK_SERVER_WRITEABLE: {
+			/*std::string clientID = "";
+			stringstream ssClientID;
+			ssClientID << nextClientID;
+			clientID += ssClientID.str();
+			libwebsocket_write(wsi, (unsigned char *)clientID.c_str(), clientID.length(), LWS_WRITE_TEXT);
+			(++nextClientID)%100;
+			std::cout << "sent clientID: " << clientID << endl;*/
+			
+			while (pss->ringbuffer_tail != ringbuffer_head) {
+				n = libwebsocket_write(wsi, (unsigned char *)
+					   ringbuffer[pss->ringbuffer_tail].payload,
+					   ringbuffer[pss->ringbuffer_tail].len,
+									LWS_WRITE_TEXT);
+				std::cout << "henk\n";
+				if (n < 0) {
+					lwsl_err("ERROR %d writing to mirror socket\n", n);
+					return -1;
+				}
+				std::cout << "henk1\n";
+				if (n < ringbuffer[pss->ringbuffer_tail].len)
+					lwsl_err("mirror partial write %d vs %d\n",
+						   n, ringbuffer[pss->ringbuffer_tail].len);
+				
+				std::cout << "henk2\n";
+
+				if (pss->ringbuffer_tail == (MAX_MESSAGE_QUEUE - 1))
+					pss->ringbuffer_tail = 0;
+				else
+					pss->ringbuffer_tail++;
+					
+				std::cout << "henk3\n";
+
+				if (((ringbuffer_head - pss->ringbuffer_tail) &
+					  (MAX_MESSAGE_QUEUE - 1)) == (MAX_MESSAGE_QUEUE - 15))
+					libwebsocket_rx_flow_allow_all_protocol(
+							   libwebsockets_get_protocol(wsi));
+				std::cout << "henk4\n";
+
+				if (lws_send_pipe_choked(wsi)) {
+					libwebsocket_callback_on_writable(context, wsi);
+					break;
+				}
+				/*
+				 * for tests with chrome on same machine as client and
+				 * server, this is needed to stop chrome choking
+				 */
+				usleep(1);
+			}
+			break;
+		}
+		case LWS_CALLBACK_CLOSED: {
+			for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
+				if(wsi == (*it))
+					g_wsis.erase(it);
+			}
 		}
 		default:
 		break;
@@ -706,6 +791,7 @@ static struct libwebsocket_protocols protocols[] = {
     {
         "open-zwave",
         open_zwaveCallback,
+		sizeof(struct per_session_data__open_zwave),
         0
     },
     {
@@ -882,7 +968,7 @@ void *websockets_main(void* arg) {
 		return 0;
 	}
 	const char *interface = NULL;
-	struct libwebsocket_context *context;
+	
 
 	// we're not using ssl
 	const char *cert_path = NULL;
@@ -912,10 +998,12 @@ void *websockets_main(void* arg) {
 	std::cout << "starting websocket server...\n";
 
 	// infinite loop, to end this server send SIGTERM. (CTRL+C)
-	while (1) {
+	while (!stopping) {
 		libwebsocket_service(context, 10);
 	}
 	libwebsocket_context_destroy(context);
+	
+	return 0;
 }
 
 void *run_socket(void* arg) {
@@ -1077,7 +1165,8 @@ std::string process_commands(std::string data) {
 					string sclabel = trim(v[2].c_str());
 					int scid=0;
 					int Node = lexical_cast<int>(v[3].c_str());
-					int Level = lexical_cast<int>(v[4].c_str());
+					double value = lexical_cast<double>(v[4].c_str());
+					bool response;
 					
 					for(int i=0; i<numscenes; ++i) {
 						scid = sceneIds[i];
@@ -1086,15 +1175,69 @@ std::string process_commands(std::string data) {
 						}
 						output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
+						uint8 cmdclass = 0;
+						if(nodeInfo->basicmapping > 0 || try_map_basic(g_homeId, Node)) {
+							cmdclass = nodeInfo->basicmapping;
+							std::cout << "mapped to " << (int) cmdclass << endl;
+						}
+						else {
+							cmdclass = COMMAND_CLASS_BASIC;
+							std::cout << "mapped to BASIC" << endl;
+						}
 						for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
-							int id = (*vit).GetCommandClassId();
-							string vlabel = Manager::Get()->GetValueLabel( (*vit) );
-						
-							if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
-								continue;
+							if((*vit).GetCommandClassId() == cmdclass) {
+								// It works fine, EXCEPT for MULTILEVEL, then we need to ignore all except the first one
+								if((*vit).GetCommandClassId() == COMMAND_CLASS_SWITCH_MULTILEVEL) {
+									if((*vit).GetIndex() != 0) {
+										continue;
+									}
+								}
+								
+								switch((*vit).GetType()) {
+									case ValueID::ValueType_Bool: {
+										bool bool_value;
+										bool_value = (bool)value;
+										response = Manager::Get()->AddSceneValue(scid, (*vit), bool_value);
+										break;
+									}
+									case ValueID::ValueType_Byte: {
+										uint8 uint8_value;
+										uint8_value = (uint8)value;
+										response = Manager::Get()->AddSceneValue(scid, (*vit), uint8_value);
+										break;
+									}
+									case ValueID::ValueType_Short: {
+										uint16 uint16_value;
+										uint16_value = (uint16)value;
+										response = Manager::Get()->AddSceneValue(scid, (*vit), uint16_value);
+										break;
+									}
+									case ValueID::ValueType_Int: {
+										int int_value;
+										int_value = value;
+										response = Manager::Get()->AddSceneValue(scid, (*vit), int_value);
+										break;
+									}
+									case ValueID::ValueType_Decimal: {
+										float float_value;
+										float_value = (float)value;
+										response = Manager::Get()->AddSceneValue(scid, (*vit), float_value);
+										break;
+									}
+									case ValueID::ValueType_List: {
+										response = Manager::Get()->AddSceneValue(scid, (*vit), (int)value);
+										break;
+									}
+									default:
+										output += "unknown ValueType";
+										break;
+								}
+								
+								if(!response)
+									output+= "Something went wrong\n";
+								else
+									output += "Add valueid/value to scene\n";
 							}
-							output += "Add valueid/value to scene\n";
-							Manager::Get()->AddSceneValue(scid, (*vit), Level);
 						}
 					}
 					Manager::Get()->WriteConfig(g_homeId);
@@ -1128,15 +1271,26 @@ std::string process_commands(std::string data) {
 						}
 						output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
+						uint8 cmdclass = 0;
+						if(nodeInfo->basicmapping > 0 || try_map_basic(g_homeId, Node)) {
+							cmdclass = nodeInfo->basicmapping;
+							std::cout << "mapped to " << (int) cmdclass << endl;
+						}
+						else {
+							cmdclass = COMMAND_CLASS_BASIC;
+							std::cout << "mapped to BASIC" << endl;
+						}
 						for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
-							int id = (*vit).GetCommandClassId();
-							string vlabel = Manager::Get()->GetValueLabel( (*vit) );
-						
-							if(id!=COMMAND_CLASS_SWITCH_MULTILEVEL || vlabel != "Level") {
-								continue;
+							if((*vit).GetCommandClassId() == cmdclass) {
+								// It works fine, EXCEPT for MULTILEVEL, then we need to ignore all except the first one
+								if((*vit).GetCommandClassId() == COMMAND_CLASS_SWITCH_MULTILEVEL) {
+									if((*vit).GetIndex() != 0) {
+										continue;
+									}
+								}
+								output += "Remove valueid from scene\n";
+								Manager::Get()->RemoveSceneValue(scid, (*vit));
 							}
-							output += "Remove valueid from scene\n";
-							Manager::Get()->RemoveSceneValue(scid, (*vit));
 						}
 					}
 					Manager::Get()->WriteConfig(g_homeId);
@@ -1157,7 +1311,13 @@ std::string process_commands(std::string data) {
 		{
 			switch(s_mapStringCommands[trim(v[1].c_str())])
 			{
-				case Add:
+				case Add: {
+					string response = "false";
+					if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate))
+						response = "true";
+					output += response;
+					break;
+				}
 				case Remove:
 				case Cancel:
 				default:
@@ -1222,11 +1382,6 @@ std::string process_commands(std::string data) {
 			break;
 		case Test:
 		{
-			/*string response = "false";
-			if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate))
-				response = "true";
-			output += response;*/
-			
 			break;
 		}
 		case Exit:
@@ -1240,12 +1395,8 @@ std::string process_commands(std::string data) {
 	return output;
 }
 
-bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string label, std::string& err_message) {
+bool SetValue(int32 home, int32 node, double value, uint8 cmdclass, std::string label, std::string& err_message) {
 	err_message = "";
-	bool bool_value;
-	int int_value;
-	uint8 uint8_value;
-	uint16 uint16_value;
 	bool response;
 	bool cmdfound = false;
 	
@@ -1261,33 +1412,51 @@ bool SetValue(int32 home, int32 node, int32 value, uint8 cmdclass, std::string l
 				continue;
 			}
 			
-			if(ValueID::ValueType_Bool == (*it).GetType()) {
-				bool_value = (bool)value;
-				response = Manager::Get()->SetValue( *it, bool_value );
-				cmdfound = true;
-			}
-			else if(ValueID::ValueType_Byte == (*it).GetType()) {
-				uint8_value = (uint8)value;
-				response = Manager::Get()->SetValue( *it, uint8_value );
-				cmdfound = true;
-			}
-			else if(ValueID::ValueType_Short == (*it).GetType()) {
-				uint16_value = (uint16)value;
-				response = Manager::Get()->SetValue( *it, uint16_value );
-				cmdfound = true;
-			}
-			else if(ValueID::ValueType_Int == (*it).GetType()) {
-				int_value = value;
-				response = Manager::Get()->SetValue( *it, int_value );
-				cmdfound = true;
-			}
-			else if(ValueID::ValueType_List == (*it).GetType()) {
-				response = Manager::Get()->SetValue( *it, value );
-				cmdfound = true;
-			}
-			else {
-				err_message += "unknown ValueType | ";
-				return false;
+			switch((*it).GetType()) {
+				case ValueID::ValueType_Bool: {
+					bool bool_value;
+					bool_value = (bool)value;
+					response = Manager::Get()->SetValue(*it, bool_value);
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Byte: {
+					uint8 uint8_value;
+					uint8_value = (uint8)value;
+					response = Manager::Get()->SetValue(*it, uint8_value);
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Short: {
+					uint16 uint16_value;
+					uint16_value = (uint16)value;
+					response = Manager::Get()->SetValue(*it, uint16_value);
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Int: {
+					int int_value;
+					int_value = value;
+					response = Manager::Get()->SetValue(*it, int_value);
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Decimal: {
+					float float_value;
+					float_value = (float)value;
+					response = Manager::Get()->SetValue(*it, float_value);
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_List: {
+					response = Manager::Get()->SetValue(*it, (int32) value);
+					cmdfound = true;
+					break;
+				}
+				default:
+					err_message += "unknown ValueType | ";
+					return false;
+					break;
 			}
 		}
 
@@ -1413,7 +1582,12 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		case Level:
 		{
 			uint8 cmdclass = COMMAND_CLASS_SWITCH_MULTILEVEL;
-			return SetValue(home, node, lexical_cast<int>(value), cmdclass, "Level", err_message);
+			return SetValue(home, node, lexical_cast<double>(value), cmdclass, "Level", err_message);
+			break;
+		}
+		case Thermostat_Setpoint: {
+			uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
+			return SetValue(home, node, lexical_cast<double>(value), cmdclass, "Heating 1", err_message);
 			break;
 		}
 		case Polling:
@@ -1480,13 +1654,13 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		{
 			uint8 cmdclass = COMMAND_CLASS_WAKE_UP;
 			save = true;
-			return SetValue(home, node, lexical_cast<int>(value), cmdclass, name, err_message);
+			return SetValue(home, node, lexical_cast<double>(value), cmdclass, name, err_message);
 		}
 		case Battery_report:
 		{
 			uint8 cmdclass = COMMAND_CLASS_CONFIGURATION;
 			save = true;
-			return SetValue(home, node, lexical_cast<int>(value), cmdclass, "Send unsolicited battery report on wakeup", err_message);
+			return SetValue(home, node, lexical_cast<double>(value), cmdclass, "Send unsolicited battery report on wakeup", err_message);
 		}
 		default:
 		break;
@@ -1567,7 +1741,7 @@ void sigalrm_handler(int sig) {
 	// more alarms on the alarmlist? Set the next one (the list is already sorted...)
 	
 	time_t now = time(NULL);
-	
+	// remove alarms that are set in the past...
 	while(!alarmlist.empty() && (alarmlist.front().alarmtime) <= now)
 	{alarmlist.pop_front();}
 					
