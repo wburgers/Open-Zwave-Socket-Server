@@ -6,7 +6,7 @@
 #include <sstream>
 #include <map>
 
-enum contents {Undefined = 0, tcp_port_n, ws_port_n, lat_n, lon_n, dayScene_n, nightScene_n, awayScene_n};
+enum contents {Undefined = 0, tcp_port_n, ws_port_n, lat_n, lon_n, morningScene_n, dayScene_n, nightScene_n, awayScene_n};
 static std::map<std::string, contents> s_mapStringValues;
 
 template <typename T>
@@ -26,6 +26,7 @@ Configuration::Configuration() :	conf_ini_location("./cpp/examples/server/Config
 									ws_port(0),
 									lat(0.0),
 									lon(0.0),
+									morningScene(""),
 									dayScene(""),
 									nightScene(""),
 									awayScene("") {
@@ -94,6 +95,8 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 			case lon_n:
 				lon = lexical_cast<float>(value);
 				break;
+			case morningScene_n:
+				morningScene = value;
 			case dayScene_n:
 				dayScene = value;
 				break;
@@ -119,6 +122,7 @@ void Configuration::create_string_map() {
 	s_mapStringValues["ws_port"] = ws_port_n;
 	s_mapStringValues["lat"] = lat_n;
 	s_mapStringValues["lon"] = lon_n;
+	s_mapStringValues["morningScene"] = morningScene_n;
 	s_mapStringValues["dayScene"] = dayScene_n;
 	s_mapStringValues["nightScene"] = nightScene_n;
 	s_mapStringValues["awayScene"] = awayScene_n;
@@ -146,6 +150,11 @@ bool Configuration::GetLocation(float &lat_, float &lon_) {
 	}
 	lat_ = lat;
 	lon_ = lon;
+	return true;
+}
+
+bool Configuration::GetMorningScene(std::string &morningScene_) {
+	morningScene_ = morningScene;
 	return true;
 }
 

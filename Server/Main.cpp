@@ -80,8 +80,8 @@ using namespace OpenZWave;
 typedef struct {
 	uint32			m_homeId;
 	uint8			m_nodeId;
-	//string			commandclass;
-	uint8			basicmapping;
+	uint8			m_basicmapping;
+	bool			m_needsSync;
 	time_t			m_LastSeen;
 	bool			m_polled;
 	list<ValueID>	m_values;
@@ -92,7 +92,7 @@ typedef struct {
 //-----------------------------------------------------------------------------
 struct Alarm {
 	time_t			alarmtime;
-	string			description;
+	std::string		description;
 	bool operator<(Alarm const &other)  { return alarmtime < other.alarmtime; }
 	bool operator==(Alarm const &other)  { return alarmtime == other.alarmtime; }
 };
@@ -100,14 +100,9 @@ struct Alarm {
 //-----------------------------------------------------------------------------
 // LibWebSockets messages definitions
 //-----------------------------------------------------------------------------
-struct a_message {
-	void *payload;
-	size_t len;
-};
-
 #define MAX_MESSAGE_QUEUE 32
 
-static struct a_message ringbuffer[MAX_MESSAGE_QUEUE];
+static std::string ringbuffer[MAX_MESSAGE_QUEUE];
 static int ringbuffer_head = 0;
 
 static list<struct libwebsocket*> g_wsis;
@@ -144,7 +139,7 @@ enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setp
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
 static std::map<std::string, DeviceOptions> s_mapStringOptions;
-static std::map<string, int> MapCommandClassBasic;
+static std::map<std::string, int> MapCommandClassBasic;
 
 void create_string_maps() {
 	s_mapStringCommands["ALIST"] = AList;
@@ -205,12 +200,43 @@ void create_string_maps() {
 void *websockets_main(void* arg);
 void *run_socket(void* arg);
 std::string process_commands(std::string data);
-bool SetValue(int32 home, int32 node, double value, uint8 cmdclass, std::string& err_message);
+bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message);
 std::string switchAtHome();
 std::string activateScene(string sclabel);
 bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message);
 bool try_map_basic(int32 home, int32 node);
 void sigalrm_handler(int sig);
+
+//-----------------------------------------------------------------------------
+// Common functions that can be used in every other function
+//-----------------------------------------------------------------------------
+void split(const string& s, const string& delimiter, vector<string>& v) {
+	string::size_type i = 0;
+	string::size_type j = s.find(delimiter);
+	while (j != string::npos) {
+		v.push_back(s.substr(i, j - i));
+		i = j += delimiter.length();
+		j = s.find(delimiter, j);
+	}
+	v.push_back(s.substr(i, s.length()));
+}
+
+string trim(string s) {
+	return s.erase(s.find_last_not_of(" \n\r\t") + 1);
+}
+
+template <typename T>
+T lexical_cast(const std::string& s) {
+	std::stringstream ss(s);
+
+	T result;
+	if((ss >> result).fail() || !(ss >> std::ws).eof())
+	{
+		throw std::runtime_error("Bad cast");
+	}
+
+	return result;
+}
 
 //-----------------------------------------------------------------------------
 // <GetNodeInfo>
@@ -277,21 +303,18 @@ void OnNotification(Notification const* _notification, void* _context) {
                     }
                 }
 				nodeInfo->m_values.push_back(_notification->GetValueID());
-				//Todo: clean up this update. This was a fast way to update the status
 				
 				//test for notifications
 				std::string WSnotification = "Notification: ValueChanged";
 				std::cout << "Adding notification to message list\n";
-				if (ringbuffer[ringbuffer_head].payload)
-					free(ringbuffer[ringbuffer_head].payload);
-				
-				ringbuffer[ringbuffer_head].payload = malloc(WSnotification.length());
-				ringbuffer[ringbuffer_head].len = WSnotification.length();
-				memcpy((char *)ringbuffer[ringbuffer_head].payload, WSnotification.c_str(), WSnotification.length());
-				if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1))
+								
+				ringbuffer[ringbuffer_head] = WSnotification;
+				if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
 					ringbuffer_head = 0;
-				else
+				}
+				else {
 					ringbuffer_head++;
+				}
 				
 				for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
 					libwebsocket_callback_on_writable(context, (*it));
@@ -316,6 +339,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 			nodeInfo->m_homeId = _notification->GetHomeId();
 			nodeInfo->m_nodeId = _notification->GetNodeId();
 			nodeInfo->m_polled = false;
+			nodeInfo->m_needsSync = false;
 			g_nodes.push_back(nodeInfo);
 			break;
 		}
@@ -395,7 +419,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 				
 				snprintf(buffer, 10, "0x%02X|0x%02X", generic, specific);
 				if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
-					nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+					nodeInfo->m_basicmapping = MapCommandClassBasic[buffer];
 				}
 				else {
 					// We didn't find a Generic+Specifc in the table, now we check
@@ -404,23 +428,67 @@ void OnNotification(Notification const* _notification, void* _context) {
 
 					// Check if we have a mapping in our map table
 					if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
-						nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+						nodeInfo->m_basicmapping = MapCommandClassBasic[buffer];
 					}
 				}
-			}
-		}
-		case Notification::Type_DriverReset:
-		case Notification::Type_Notification:
-		case Notification::Type_NodeNaming:
-		case Notification::Type_NodeQueriesComplete:
-		{
-			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
-				nodeInfo->m_LastSeen = time( NULL );
+				
+				nodeInfo->m_LastSeen = time(NULL);
 			}
 			break;
 		}
-		default:
-		{
+		case Notification::Type_Notification:
+			switch(_notification->GetNotification()) {
+				case Notification::Code_Awake: {
+					/*if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
+						if(nodeInfo->m_needsSync) {
+							time_t rawtime;
+							tm * timeinfo;
+							time(&rawtime);
+							timeinfo=localtime(&rawtime);
+							
+							uint32 const homeId = _notification->GetHomeId();
+							uint8 const nodeId = _notification->GetNodeId();
+							std::string err_message = "";
+							
+							const std::string DAY[]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
+							stringstream ssHour, ssMin;
+							ssHour << timeinfo->tm_hour;
+							ssMin << timeinfo->tm_min;
+							
+							try {
+								cout << "Day\n";
+								if(!SetValue(homeId, nodeId, DAY[timeinfo->tm_wday], COMMAND_CLASS_CLOCK, "Day", err_message)) {
+									cout << "Error in timesync (day) for node " << nodeId << ":\n" << err_message << endl;
+								}
+								cout << "Hour\n";
+								cout << ssHour.str() << endl;
+								if(!SetValue(homeId, nodeId, ssHour.str(), COMMAND_CLASS_CLOCK, "Hour", err_message)) {
+									cout << "Error in timesync (hour) for node " << nodeId << ":\n" << err_message << endl;
+								}
+								cout << "Minute\n";
+								if(!SetValue(homeId, nodeId, ssMin.str(), COMMAND_CLASS_CLOCK, "Minute", err_message)) {
+									cout << "Error in timesync (min) for node " << nodeId << ":\n" << err_message << endl;
+								}
+							}
+							catch (std::exception const& e) {
+								std::cout << "Exception: " << e.what() << endl;
+							}
+							nodeInfo->m_needsSync = false;
+						}
+					}*/
+				}
+				default: {
+				}
+			}
+		case Notification::Type_DriverReset:
+		case Notification::Type_NodeNaming:
+		case Notification::Type_NodeQueriesComplete: {
+			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
+				nodeInfo->m_LastSeen = time(NULL);
+			}
+			break;
+		}
+		default: {
 		}
 	}
 
@@ -729,33 +797,26 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			
 			while (pss->ringbuffer_tail != ringbuffer_head) {
 				n = libwebsocket_write(wsi, (unsigned char *)
-					   ringbuffer[pss->ringbuffer_tail].payload,
-					   ringbuffer[pss->ringbuffer_tail].len,
+					   ringbuffer[pss->ringbuffer_tail].c_str(),
+					   ringbuffer[pss->ringbuffer_tail].length(),
 									LWS_WRITE_TEXT);
-				std::cout << "henk\n";
 				if (n < 0) {
 					lwsl_err("ERROR %d writing to mirror socket\n", n);
 					return -1;
 				}
-				std::cout << "henk1\n";
-				if (n < ringbuffer[pss->ringbuffer_tail].len)
+				if (n < ringbuffer[pss->ringbuffer_tail].length())
 					lwsl_err("mirror partial write %d vs %d\n",
-						   n, ringbuffer[pss->ringbuffer_tail].len);
-				
-				std::cout << "henk2\n";
+						   n, ringbuffer[pss->ringbuffer_tail].length());
 
 				if (pss->ringbuffer_tail == (MAX_MESSAGE_QUEUE - 1))
 					pss->ringbuffer_tail = 0;
 				else
 					pss->ringbuffer_tail++;
-					
-				std::cout << "henk3\n";
 
 				if (((ringbuffer_head - pss->ringbuffer_tail) &
 					  (MAX_MESSAGE_QUEUE - 1)) == (MAX_MESSAGE_QUEUE - 15))
 					libwebsocket_rx_flow_allow_all_protocol(
 							   libwebsockets_get_protocol(wsi));
-				std::cout << "henk4\n";
 
 				if (lws_send_pipe_choked(wsi)) {
 					libwebsocket_callback_on_writable(context, wsi);
@@ -804,34 +865,6 @@ static struct libwebsocket_protocols protocols[] = {
  for each connection.  It handles all communication
  once a connnection has been established.
  *****************************************/
-
-void split(const string& s, const string& delimiter, vector<string>& v) {
-	string::size_type i = 0;
-	string::size_type j = s.find(delimiter);
-	while (j != string::npos) {
-		v.push_back(s.substr(i, j - i));
-		i = j += delimiter.length();
-		j = s.find(delimiter, j);
-	}
-	v.push_back(s.substr(i, s.length()));
-}
-
-string trim(string s) {
-	return s.erase(s.find_last_not_of(" \n\r\t") + 1);
-}
-
-template <typename T>
-T lexical_cast(const std::string& s) {
-	std::stringstream ss(s);
-
-	T result;
-	if((ss >> result).fail() || !(ss >> std::ws).eof())
-	{
-		throw std::runtime_error("Bad cast");
-	}
-
-	return result;
-}
 
 //-----------------------------------------------------------------------------
 // <main>
@@ -1102,7 +1135,6 @@ std::string process_commands(std::string data) {
 				bool save = false;
 				
 				for(std::vector<string>::iterator it = OptionList.begin(); it != OptionList.end(); ++it) {
-					std::cout << (*it) << endl;
 					std::size_t found = (*it).find('=');
 					if(found!=std::string::npos) {
 						std::string name = (*it).substr(0,found);
@@ -1176,8 +1208,8 @@ std::string process_commands(std::string data) {
 						output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
 						uint8 cmdclass = 0;
-						if(nodeInfo->basicmapping > 0 || try_map_basic(g_homeId, Node)) {
-							cmdclass = nodeInfo->basicmapping;
+						if(nodeInfo->m_basicmapping > 0 || try_map_basic(g_homeId, Node)) {
+							cmdclass = nodeInfo->m_basicmapping;
 							std::cout << "mapped to " << (int) cmdclass << endl;
 						}
 						else {
@@ -1272,8 +1304,8 @@ std::string process_commands(std::string data) {
 						output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
 						uint8 cmdclass = 0;
-						if(nodeInfo->basicmapping > 0 || try_map_basic(g_homeId, Node)) {
-							cmdclass = nodeInfo->basicmapping;
+						if(nodeInfo->m_basicmapping > 0 || try_map_basic(g_homeId, Node)) {
+							cmdclass = nodeInfo->m_basicmapping;
 							std::cout << "mapped to " << (int) cmdclass << endl;
 						}
 						else {
@@ -1327,9 +1359,8 @@ std::string process_commands(std::string data) {
 		case Cron:
 		{
 			//planning to add a google calendar add-in here.
-			//right now it will just update the sunrise and sunset times for today
-			//call zcron.sh from cron to enable this function
 			
+			//set the daily alarms and check if any have passed already (I execute zcron.sh around 4:15 AM)
 			time_t sunrise = 0, sunset = 0;
 			float lat, lon;
 			conf->GetLocation(lat, lon);
@@ -1345,8 +1376,8 @@ std::string process_commands(std::string data) {
 				alarmlist.push_back(sunsetAlarm);
 			}
 			
-			alarmlist.sort();
-			alarmlist.unique();
+			alarmlist.sort(); // sort by timestamp
+			alarmlist.unique(); // remove double timestamps
 			
 			time_t now = time(NULL);
 			
@@ -1357,6 +1388,69 @@ std::string process_commands(std::string data) {
 				signal(SIGALRM, sigalrm_handler);   
 				alarm(alarmlist.front().alarmtime - now);
 				alarmset = true;
+			}
+			
+			//synchronize devices with Command_Class_Clock
+			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+				time_t rawtime;
+				tm * timeinfo;
+				time(&rawtime);
+				timeinfo=localtime(&rawtime);
+				
+				for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
+					if((*vit).GetCommandClassId() != COMMAND_CLASS_CLOCK) {
+						continue;
+					}
+					
+					switch((*vit).GetIndex()) {
+						case 0: {
+							std::string deviceDayValue;
+							const std::string DAY[]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
+							if(Manager::Get()->GetValueListSelection((*vit), &deviceDayValue)) {
+								if(strcmp(DAY[(timeinfo->tm_wday)].c_str(), deviceDayValue.c_str()) != 0) {
+									(*it)->m_needsSync = true;
+								}
+							}
+							else {
+								stringstream ssNodeId;
+								ssNodeId << (*it)->m_nodeId;
+								output += "Could not get the day out of node " + ssNodeId.str() + "\n";
+							}
+							break;
+						}
+						case 1: {
+							uint8 deviceHourValue = -1;
+							if(Manager::Get()->GetValueAsByte((*vit), &deviceHourValue)) {
+								if((int)deviceHourValue != timeinfo->tm_hour) {
+									(*it)->m_needsSync = true;
+								}
+							}
+							else {
+								stringstream ssNodeId;
+								ssNodeId << (*it)->m_nodeId;
+								output += "Could not get the hour out of node " + ssNodeId.str() + "\n";
+							}
+							break;
+						}
+						case 2: {
+							uint8 deviceMinuteValue = -1;
+							if(Manager::Get()->GetValueAsByte((*vit), &deviceMinuteValue)) {
+								if((int)deviceMinuteValue != timeinfo->tm_min) {
+									(*it)->m_needsSync = true;
+								}
+							}
+							else {
+								stringstream ssNodeId;
+								ssNodeId << (*it)->m_nodeId;
+								output += "Could not get the minute out of node " + ssNodeId.str() + "\n";
+							}
+							break;
+						}
+						default:
+							output += "could find the current time of node\n";
+					}
+				}
+				//cout << (*it)->m_needsSync << endl;
 			}
 			break;
 		}
@@ -1395,7 +1489,7 @@ std::string process_commands(std::string data) {
 	return output;
 }
 
-bool SetValue(int32 home, int32 node, double value, uint8 cmdclass, std::string label, std::string& err_message) {
+bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message) {
 	err_message = "";
 	bool response;
 	bool cmdfound = false;
@@ -1414,42 +1508,32 @@ bool SetValue(int32 home, int32 node, double value, uint8 cmdclass, std::string 
 			
 			switch((*it).GetType()) {
 				case ValueID::ValueType_Bool: {
-					bool bool_value;
-					bool_value = (bool)value;
-					response = Manager::Get()->SetValue(*it, bool_value);
+					response = Manager::Get()->SetValue(*it, lexical_cast<bool>(value));
 					cmdfound = true;
 					break;
 				}
 				case ValueID::ValueType_Byte: {
-					uint8 uint8_value;
-					uint8_value = (uint8)value;
-					response = Manager::Get()->SetValue(*it, uint8_value);
+					response = Manager::Get()->SetValue(*it, (uint8) lexical_cast<int>(value));
 					cmdfound = true;
 					break;
 				}
 				case ValueID::ValueType_Short: {
-					uint16 uint16_value;
-					uint16_value = (uint16)value;
-					response = Manager::Get()->SetValue(*it, uint16_value);
+					response = Manager::Get()->SetValue(*it, (uint16) lexical_cast<int>(value));
 					cmdfound = true;
 					break;
 				}
 				case ValueID::ValueType_Int: {
-					int int_value;
-					int_value = value;
-					response = Manager::Get()->SetValue(*it, int_value);
+					response = Manager::Get()->SetValue(*it, lexical_cast<int>(value));
 					cmdfound = true;
 					break;
 				}
 				case ValueID::ValueType_Decimal: {
-					float float_value;
-					float_value = (float)value;
-					response = Manager::Get()->SetValue(*it, float_value);
+					response = Manager::Get()->SetValue(*it, lexical_cast<float>(value));
 					cmdfound = true;
 					break;
 				}
 				case ValueID::ValueType_List: {
-					response = Manager::Get()->SetValue(*it, (int32) value);
+					response = Manager::Get()->SetValueListSelection(*it, value);
 					cmdfound = true;
 					break;
 				}
@@ -1582,12 +1666,12 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		case Level:
 		{
 			uint8 cmdclass = COMMAND_CLASS_SWITCH_MULTILEVEL;
-			return SetValue(home, node, lexical_cast<double>(value), cmdclass, "Level", err_message);
+			return SetValue(home, node, value, cmdclass, "Level", err_message);
 			break;
 		}
 		case Thermostat_Setpoint: {
 			uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
-			return SetValue(home, node, lexical_cast<double>(value), cmdclass, "Heating 1", err_message);
+			return SetValue(home, node, value, cmdclass, "Heating 1", err_message);
 			break;
 		}
 		case Polling:
@@ -1599,8 +1683,8 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 			}
 			if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
 				uint8 cmdclass = 0;
-				if(nodeInfo->basicmapping > 0 || try_map_basic(home, node)) {
-					cmdclass = nodeInfo->basicmapping;
+				if(nodeInfo->m_basicmapping > 0 || try_map_basic(home, node)) {
+					cmdclass = nodeInfo->m_basicmapping;
 					std::cout << "mapped to " << (int) cmdclass << endl;
 				}
 				else {
@@ -1654,16 +1738,16 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		{
 			uint8 cmdclass = COMMAND_CLASS_WAKE_UP;
 			save = true;
-			return SetValue(home, node, lexical_cast<double>(value), cmdclass, name, err_message);
+			return SetValue(home, node, value, cmdclass, name, err_message);
 		}
 		case Battery_report:
 		{
 			uint8 cmdclass = COMMAND_CLASS_CONFIGURATION;
 			save = true;
-			return SetValue(home, node, lexical_cast<double>(value), cmdclass, "Send unsolicited battery report on wakeup", err_message);
+			return SetValue(home, node, value, cmdclass, "Send unsolicited battery report on wakeup", err_message);
 		}
 		default:
-		break;
+			break;
 	}
 	return false;
 }
@@ -1676,7 +1760,7 @@ bool try_map_basic(int32 home, int32 node) {
 		
 		snprintf(buffer, 10, "0x%02X|0x%02X", generic, specific);
 		if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
-			nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+			nodeInfo->m_basicmapping = MapCommandClassBasic[buffer];
 			return true;
 		}
 		else {
@@ -1686,7 +1770,7 @@ bool try_map_basic(int32 home, int32 node) {
 
 			// Check if we have a mapping in our map table
 			if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
-				nodeInfo->basicmapping = MapCommandClassBasic[buffer];
+				nodeInfo->m_basicmapping = MapCommandClassBasic[buffer];
 				return true;
 			}
 		}
@@ -1703,10 +1787,10 @@ void sigalrm_handler(int sig) {
 		{
 			case Sunrise:
 			{
-				std::string dayScene;
-				conf->GetDayScene(dayScene);
+				std::string morningScene;
+				conf->GetMorningScene(morningScene);
 				try {
-					std::cout << activateScene(dayScene);
+					std::cout << activateScene(morningScene);
 				}
 				catch (ProtocolException& e) {
 					string what = "ProtocolException: ";
