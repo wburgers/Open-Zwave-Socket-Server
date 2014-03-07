@@ -4,23 +4,85 @@
     <head>
         <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
         <script type="text/javascript">
+			var nodeInfo = [];
+			var Rooms = [];
+			var clientID;
+			window.WebSocket = window.WebSocket || window.MozWebSocket;
+			var websocket;
+			
             $(document).ready(function() {
-                window.WebSocket = window.WebSocket || window.MozWebSocket; 
-                var websocket = new WebSocket('ws://openzwave-server-ip:6005', 'open-zwave');
-                websocket.onopen = function () {
-                    $('h1').html('Connected!');
-                };
-                websocket.onerror = function () {
-                    $('h1').html('Error Connecting! Have you set the Openzwave-server-ip in this index.html file?');
-                };
-                websocket.onmessage = function (message) {
-                    $('div').append(message.data + "<br />");
-                }; 
+                websocket = new WebSocket('ws://openzwave-server-ip:6005', 'open-zwave');
+				try {
+					websocket.onopen = function () {
+						$('h2').html('Connected!');
+						GetDeviceList();
+					};
+					websocket.onerror = function (error) {
+						$('h2').html('Error Connecting! Have you set the Openzwave-server-ip in this index.html file?');
+						console.log("error: " + error.data);
+					};
+					websocket.onmessage = function (message) {
+						//$('div').append(message.data + "<br />");
+						var response = message.data;
+						var splitresponse = response.split("|");
+						var command = splitresponse[0];
+						console.log(command);
+						var commandSwitch = {
+							"ALIST": function() {
+								var devices = splitresponse[1].split("#");
+								$.each(devices, function(index, deviceString) {
+									var splitDeviceString = deviceString.split("~");
+									var splitValueString = splitDeviceString[6].split("<>");
+									var values = {};
+									$.each(splitValueString, function(i, valueString) {
+										var keyvaluepair = valueString.split("=");
+										values[keyvaluepair[0]] = keyvaluepair[1];
+									});
+									var device = {
+										Name: splitDeviceString[1],
+										ID: splitDeviceString[2],
+										Location: splitDeviceString[3],
+										Type: splitDeviceString[4],
+										LastSeen: splitDeviceString[5],
+										Values: values,
+									};
+									nodeInfo.push(device);
+									Rooms.push(splitDeviceString[3]);
+								});
+								Rooms = $.unique(Rooms);
+							},
+							"SWITCH": function() {
+								alert( "boo baz :(" );
+							},
+							"default": function() {
+								alert( "everything else is just ok" );
+							}
+						};
+						
+						if ( commandSwitch[ command ] ) {
+							commandSwitch[ command ]();
+						}
+						else {
+							commandSwitch[ "default" ]();
+						}
+					};
+					websocket.onclose = function (event) {
+						$('div').append(event.code + " " + event.reason + "<br />");
+					};
+				}
+				catch(exception) {
+					alert('Error' + exception);
+				}
                 $('button').click(function(e) {
                     e.preventDefault();
                     websocket.send($('input').val());
                     $('input').val('');
                 });
+            });
+			
+			function GetDeviceList() {
+				websocket.send('ALIST');
+				
 				if(navigator.geolocation) {
 					navigator.geolocation.getCurrentPosition(
 						function(position) {
@@ -56,12 +118,24 @@
 						(1000 * 60 * 5)
 					);
 				}
-				websocket.send('ALIST');
-            });
+				
+				sleep(50, henk);
+			};
+			
+			function sleep(millis, callback) {
+				setTimeout(function(){
+					callback();
+				}, millis);
+			}
+			
+			function henk() {
+				console.log(nodeInfo);
+			};
         </script>
         </head>
     <body>
-        <h1>WebSocket Status</h1>
+        <h1>Open-Zwave client</h1>
+		<h2>Websocket status</h2>
         <input type="text" />
         <button>Send Test Message</button>
         <div></div>

@@ -757,14 +757,14 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 		{
 			pss->ringbuffer_tail = ringbuffer_head;
 			printf("connection established\n");
-			g_wsis.push_back(wsi);
+			//g_wsis.push_back(wsi);
 			break;
 		}
 		case LWS_CALLBACK_RECEIVE: {
 			std::string command = (char*) in;
-			std::string response;
+			std::string response = command + "|";
 			try {
-				response = process_commands(command);
+				response += process_commands(command);
 			}
 			catch (ProtocolException& e) {
 				string what = "ProtocolException: ";
@@ -830,11 +830,18 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			}
 			break;
 		}
-		case LWS_CALLBACK_CLOSED: {
+		/*case LWS_CALLBACK_CLOSED: {
 			for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
-				if(wsi == (*it))
+				if(wsi == (*it)) {
+					std::cout << "remove wsi" << endl;
 					g_wsis.erase(it);
+					std::cout << "henk" << endl;
+				}
 			}
+			break;
+		}*/
+		case LWS_CALLBACK_PROTOCOL_DESTROY: {
+			std::cout << "open-zwave protocol not used anymore" << endl;
 		}
 		default:
 		break;
@@ -1002,10 +1009,8 @@ void *websockets_main(void* arg) {
 	}
 	const char *interface = NULL;
 	
-
-	// we're not using ssl
-	const char *cert_path = NULL;
-	const char *key_path = NULL;
+	const char *cert_path =  NULL;//"./cpp/examples/server/cert/server.crt";
+	const char *key_path = NULL;//"./cpp/examples/server/cert/server.key";
 
 	// no special options
 	int opts = 0;

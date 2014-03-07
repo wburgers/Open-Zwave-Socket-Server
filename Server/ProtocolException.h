@@ -4,6 +4,7 @@
 #define ProtocolException_class
 
 #include <string>
+#include <sstream>
 
 class ProtocolException
 {
@@ -12,8 +13,10 @@ class ProtocolException
   ~ProtocolException (){};
 
   std::string what() {
+	std::stringstream code;
+	code << m_code;
 	std::string what = "";
-	what += m_code;
+	what += code.str();
 	what += ": ";
 	what += m_s;
 	return what;

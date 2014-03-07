@@ -13,3 +13,8 @@ zw*.xml
 .idea/scopes/scope_settings.xml
 .idea/vcs.xml
 .idea/workspace.xml
+
+*.crt
+*.csr
+*.key
+*.key.org
