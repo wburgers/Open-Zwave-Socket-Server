@@ -1,20 +1,65 @@
 <!--I want to make a generic websocket client and style the webpage in Drupal. This client is mainly a test.-->
-<!DOCTYPE html>  
-<html>  
+<!DOCTYPE html>
+<html>
     <head>
+		<link type="text/css" rel="stylesheet" href="http://code.jquery.com/ui/1.10.4/themes/smoothness/jquery-ui.css"/>
+		<link type="text/css" rel="stylesheet" href="stylesheet.css"/>
         <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
-        <script type="text/javascript">
+		<script src="http://code.jquery.com/ui/1.10.4/jquery-ui.min.js"></script>
+		<script src="http://cdn.jsdelivr.net/raphael/2.1.2/raphael-min.js"></script>
+		<script src="http://cdn.jsdelivr.net/justgage/1.0.1/justgage.min.js"></script>
+        </head>
+    <body>
+        <h1>Open-Zwave client</h1>
+		<h2>Websocket status</h2>
+        <input type="text" />
+        <button id="Send">Send Test Message</button>
+        <div id="content">
+			<div class="Rooms">
+			</div>
+			<div class="room-content">
+				<div id="tabs" class="tabs-bottom">
+					<ul>
+						<li><a href="#tab-devices">Devices</a></li>
+						<li><a href="#tab-temperature">Temperature</a></li>
+					</ul>
+					<div class="tabs-spacer"></div>
+					<div id="tab-devices"></div>
+					<div id="tab-temperature">
+						<div class="temp-buttons">
+							<div class="temp-button">
+								<button id="plus-button">+</button>
+							</div>
+							<div class="temp-button">
+								<button id="minus-button">-</button>
+							</div>
+						</div>
+						<div class="gauges">
+							<div class="gauge" id="current-temp"></div>
+							<div class="gauge" id="setpoint-temp"></div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<script type="text/javascript">
 			var nodeInfo = [];
 			var Rooms = [];
 			var clientID;
 			window.WebSocket = window.WebSocket || window.MozWebSocket;
 			var websocket;
+			var currentTemp;
+			var setpointTemp;
 			
             $(document).ready(function() {
+				stylizePage();
+				
                 websocket = new WebSocket('ws://openzwave-server-ip:6005', 'open-zwave');
 				try {
 					websocket.onopen = function () {
 						$('h2').html('Connected!');
+						Init();
 						GetDeviceList();
 					};
 					websocket.onerror = function (error) {
@@ -22,7 +67,6 @@
 						console.log("error: " + error.data);
 					};
 					websocket.onmessage = function (message) {
-						//$('div').append(message.data + "<br />");
 						var response = message.data;
 						var splitresponse = response.split("|");
 						var command = splitresponse[0];
@@ -55,15 +99,15 @@
 								alert( "boo baz :(" );
 							},
 							"default": function() {
-								alert( "everything else is just ok" );
+								//alert( "everything else is just ok" );
 							}
 						};
 						
-						if ( commandSwitch[ command ] ) {
-							commandSwitch[ command ]();
+						if ( commandSwitch[command] ) {
+							commandSwitch[command]();
 						}
 						else {
-							commandSwitch[ "default" ]();
+							commandSwitch["default"]();
 						}
 					};
 					websocket.onclose = function (event) {
@@ -73,17 +117,70 @@
 				catch(exception) {
 					alert('Error' + exception);
 				}
-                $('button').click(function(e) {
+            });
+			
+			function stylizePage() {
+				/* --------------------------------------------------
+					set the tabs
+				-------------------------------------------------- */
+				$( "#tabs" ).tabs({active: 1, show: { effect: "drop", duration: 200 }});
+				/* --------------------------------------------------
+					fix the classes
+				-------------------------------------------------- */
+				$( ".tabs-bottom .ui-tabs-nav, .tabs-bottom .ui-tabs-nav > *" )
+				.removeClass( "ui-corner-all ui-corner-top" )
+				.addClass( "ui-corner-bottom" );
+				/* --------------------------------------------------
+					move the nav to the bottom
+				-------------------------------------------------- */
+				$( ".tabs-bottom .ui-tabs-nav" ).appendTo( ".tabs-bottom" );
+				
+				currentTemp = new JustGage({
+					id: "current-temp",
+					value: 0,
+					min: 10,
+					max: 35,
+					title: "Current temperature"
+				});
+				setpointTemp = new JustGage({
+					id: "setpoint-temp",
+					value: 0,
+					min: 10,
+					max: 35,
+					title: "Setpoint temperature"
+				});
+			};
+			
+			function Init() {
+				/* --------------------------------------------------
+					register button actions
+				-------------------------------------------------- */
+				console.log("Init");
+				$("#Send").click(function(e) {
                     e.preventDefault();
                     websocket.send($('input').val());
                     $('input').val('');
                 });
-            });
+				$("#plus-button").click(function(e) {
+                    e.preventDefault();
+					var room = this.className.split(/\s/).filter(function( cn ) {
+						return cn.indexOf('room-') === 0;
+					})[0].replace("room-", "");
+					websocket.send("ROOM~PLUS~"+room);
+                });
+				$("#minus-button").click(function(e) {
+                    e.preventDefault();
+                    var room = this.className.split(/\s/).filter(function( cn ) {
+						return cn.indexOf('room-') === 0;
+					})[0].replace("room-", "");
+					websocket.send("ROOM~MINUS~"+room);
+                });
+			}
 			
 			function GetDeviceList() {
 				websocket.send('ALIST');
 				
-				if(navigator.geolocation) {
+				/*if(navigator.geolocation) {
 					navigator.geolocation.getCurrentPosition(
 						function(position) {
 							// Log that this is the initial position.
@@ -117,27 +214,75 @@
 						},
 						(1000 * 60 * 5)
 					);
-				}
+				}*/
 				
-				sleep(50, henk);
+				sleep(25, Display);
 			};
 			
 			function sleep(millis, callback) {
 				setTimeout(function(){
 					callback();
 				}, millis);
-			}
+			};
 			
-			function henk() {
-				console.log(nodeInfo);
+			function Display() {
+				$.each(Rooms, function(index, Room) {
+					$(".Rooms").append("<button class=\"Room\" id=\""+Room+"\">"+Room+"</button>");
+				});
+				$("button").button();
+				$(".Room").click(function(e) {
+					e.preventDefault();
+					//console.log("Button clicked from class: "+e.currentTarget.id);
+					/* --------------------------------------------------
+						clear the current content
+					-------------------------------------------------- */
+					$("#tab-devices").html("");
+					
+					var currentRoomTemp = 0;
+					var currentSetpoint = 0;
+					
+					/* --------------------------------------------------
+						add the switches/dimmers to the devices tab here
+					-------------------------------------------------- */
+					$.each(nodeInfo, function(index, device) {
+						console.log(device);
+						if(device.Location == e.currentTarget.id && device.Type == "Multilevel Power Switch") {
+							$("#tab-devices").append("<div class=\"Device\" id=\""+device.ID+"\"><h3>"+device.Name+"</h3><div class=\"slider\" id=\""+device.ID+"\"></div><div class=\"currentLevel\" id=\""+device.ID+"\">"+device.Values.Level+"</div></div>");
+							
+							$("#"+device.ID+".slider").slider({min: 0, max: 99, range: "min", value: device.Values.Level,
+								start: function (event, ui) {
+									$("#"+device.ID+".slider").data( 'clicked', true );
+								},
+								stop: function (event, ui) {
+									$("#"+device.ID+".currentLevel").empty().append(ui.value);
+									websocket.send("SETNODE~"+device.ID+"~Level="+ui.value)
+									$("#"+device.ID+".slider").data( 'clicked', false );
+								}
+							});
+						}
+						if(device.Location == e.currentTarget.id && device.Type == "Routing Multilevel Sensor") {
+							currentRoomTemp = device.Values.Temperature;
+							//$("#current-temp.lastseen").html("").append("Last seen at: "+device.LastSeen)
+						}
+						if(device.Location == e.currentTarget.id && device.Type == "Setpoint Thermostat") {
+							currentSetpoint = device.Values['Heating 1'];
+						}
+					});
+					
+					/* --------------------------------------------------
+						build the temperature tab here
+					-------------------------------------------------- */
+					currentTemp.refresh(currentRoomTemp);
+					setpointTemp.refresh(currentSetpoint);
+					
+					$("#plus-button").removeClass (function (index, css) {
+						return (css.match (/\broom-\S+/g) || []).join(' ');
+					}).addClass("room-"+e.currentTarget.id);
+					$("#minus-button").removeClass (function (index, css) {
+						return (css.match (/\broom-\S+/g) || []).join(' ');
+					}).addClass("room-"+e.currentTarget.id);
+				});
 			};
         </script>
-        </head>
-    <body>
-        <h1>Open-Zwave client</h1>
-		<h2>Websocket status</h2>
-        <input type="text" />
-        <button>Send Test Message</button>
-        <div></div>
     </body>
 </html>

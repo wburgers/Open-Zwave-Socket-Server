@@ -133,7 +133,7 @@ static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, SetNode, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
+enum Commands {Undefined_command = 0, AList, SetNode, Room, Plus, Minus, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
@@ -144,6 +144,9 @@ static std::map<std::string, int> MapCommandClassBasic;
 void create_string_maps() {
 	s_mapStringCommands["ALIST"] = AList;
 	s_mapStringCommands["SETNODE"] = SetNode;
+	s_mapStringCommands["ROOM"] = Room;
+	s_mapStringCommands["PLUS"] = Plus;
+	s_mapStringCommands["MINUS"] = Minus;
 	s_mapStringCommands["SCENE"] = SceneC;
 	s_mapStringCommands["CREATE"] = Create;
 	s_mapStringCommands["ADD"] = Add;
@@ -733,10 +736,77 @@ void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err
 // Libwebsockets definitions
 //-----------------------------------------------------------------------------
 
-static int nullHttpCallback(struct libwebsocket_context *context,
+static int httpCallback(struct libwebsocket_context *context,
 							struct libwebsocket *wsi,
 							enum libwebsocket_callback_reasons reason,
 							void *user, void *in, size_t len) {
+	/* switch (reason) {
+        // http://git.warmcat.com/cgi-bin/cgit/libwebsockets/tree/lib/libwebsockets.h#n260
+        case LWS_CALLBACK_CLIENT_WRITEABLE:
+            printf("connection established\n");
+           
+        // http://git.warmcat.com/cgi-bin/cgit/libwebsockets/tree/lib/libwebsockets.h#n281
+        case LWS_CALLBACK_HTTP: {
+            char *requested_uri = (char *) in;
+            printf("requested URI: %s\n", requested_uri);
+           
+            if (strcmp(requested_uri, "/") == 0) {
+                std::string universal_response = "Hello, World!";
+                // http://git.warmcat.com/cgi-bin/cgit/libwebsockets/tree/lib/libwebsockets.h#n597
+                libwebsocket_write(wsi, (unsigned char *) universal_response.c_str(),
+                                   universal_response.length(), LWS_WRITE_HTTP);
+
+            } else {
+                // try to get current working directory
+                char cwd[1024];
+                char *resource_path;
+               
+                if (getcwd(cwd, sizeof(cwd)) != NULL) {
+                    // allocate enough memory for the resource path
+                    resource_path = malloc(strlen(cwd) + strlen(requested_uri));
+                   
+                    // join current working direcotry to the resource path
+                    sprintf(resource_path, "%s%s", cwd, requested_uri);
+                    printf("resource path: %s\n", resource_path);
+                   
+                    char *extension = strrchr(resource_path, '.');
+                    std::string mime;
+                   
+                    // choose mime type based on the file extension
+                    if (extension == NULL) {
+                        mime = "text/plain";
+                    } else if (strcmp(extension, ".png") == 0) {
+                        mime = "image/png";
+                    } else if (strcmp(extension, ".jpg") == 0) {
+                        mime = "image/jpg";
+                    } else if (strcmp(extension, ".gif") == 0) {
+                        mime = "image/gif";
+                    } else if (strcmp(extension, ".html") == 0) {
+                        mime = "text/html";
+                    } else if (strcmp(extension, ".css") == 0) {
+                        mime = "text/css";
+                    } else {
+                        mime = "text/plain";
+                    }
+                   
+                    // by default non existing resources return code 400
+                    // for more information how this function handles headers
+                    // see it's source code
+                    // http://git.warmcat.com/cgi-bin/cgit/libwebsockets/tree/lib/parsers.c#n1896
+                    libwebsockets_serve_http_file(context, wsi, resource_path, mime.c_str(), NULL);
+                   
+                }
+            }
+           
+            // close connection
+            libwebsocket_close_and_free_session(context, wsi,
+                                                LWS_CLOSE_STATUS_NORMAL);
+            break;
+        }
+        default:
+            printf("unhandled callback\n");
+            break;
+    } */
     return 0;
 }
 
@@ -748,7 +818,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 								struct libwebsocket *wsi,
 								enum libwebsocket_callback_reasons reason,
 								void *user, void *in, size_t len) {
-	int n;
+	uint n;
 	struct per_session_data__open_zwave *pss = (struct per_session_data__open_zwave *)user;
 	
 	// reason for callback
@@ -762,7 +832,9 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 		}
 		case LWS_CALLBACK_RECEIVE: {
 			std::string command = (char*) in;
-			std::string response = command + "|";
+			vector<string> v;
+			split(command, "~", v);
+			std::string response = v[0] + "|";
 			try {
 				response += process_commands(command);
 			}
@@ -853,7 +925,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 static struct libwebsocket_protocols protocols[] = {  
     {
         "http-only",
-        nullHttpCallback,
+        httpCallback,
         0
     },
     {
@@ -895,6 +967,7 @@ int main(int argc, char* argv[]) {
 	// the log file will appear in the program's working directory.
 	//Options::Create("../../../../config/", "", "");
 	Options::Create("./config/", "", "");
+	Options::Get()->AddOptionInt("RetryTimeout", 5000);
 	Options::Get()->Lock();
 
 	Manager::Create();
@@ -1162,6 +1235,50 @@ std::string process_commands(std::string data) {
 			ssNode << Node;
 			output += "MSG~ZWave Name set Node=" + ssNode.str() + "\n";
 			
+			break;
+		}
+		case Room:
+		{
+			if(v.size() != 3) {
+				throw ProtocolException(2, "Wrong number of arguments");
+			}
+			std::cout << "hoi";
+			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+				if(strcmp(Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId).c_str(), trim(v[2].c_str()).c_str()) != 0) {
+					continue;
+				}
+				if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*it)->m_nodeId).c_str(), "Setpoint Thermostat") !=0) {
+					continue;
+				}
+				float currentTemp=0.0;
+				for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
+					if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") !=0) {
+						continue;
+					}
+					if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
+						throw ProtocolException(5, "Error while parsing command");
+					}
+				}
+				switch(s_mapStringCommands[trim(v[1].c_str())])
+				{
+					case Plus:
+						currentTemp += 0.5;
+						break;
+					case Minus:
+						currentTemp -= 0.5;
+						break;
+					default:
+						throw ProtocolException(1, "Unknown Room command");
+						break;
+				}
+				stringstream ssCurrentTemp;
+				ssCurrentTemp << currentTemp;
+				uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
+				string err_message = "";
+				if(!SetValue(g_homeId, (*it)->m_nodeId, ssCurrentTemp.str(), cmdclass, "Heating 1", err_message)) {
+					output += err_message;
+				}
+			}
 			break;
 		}
 		case SceneC:
