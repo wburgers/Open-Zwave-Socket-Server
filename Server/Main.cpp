@@ -140,6 +140,7 @@ static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
 static std::map<std::string, DeviceOptions> s_mapStringOptions;
 static std::map<std::string, int> MapCommandClassBasic;
+static std::map<std::string, float> RoomSetpoints;
 
 void create_string_maps() {
 	s_mapStringCommands["ALIST"] = AList;
@@ -197,6 +198,25 @@ void create_string_maps() {
 	MapCommandClassBasic["0x40|0x02"] = 0x62;
 	MapCommandClassBasic["0x40|0x03"] = 0x62;
 	MapCommandClassBasic["0xa1"] = 0x71;
+}
+
+bool init_RoomSetpoints() {
+	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+		std::string location = Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId);
+		if(RoomSetpoints.find(location) == RoomSetpoints.end()) {
+			float currentTemp=0.0;
+			for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
+				if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") !=0) {
+					continue;
+				}
+				if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
+					return false;
+				}
+			}
+			RoomSetpoints.insert(std::pair<std::string, float>(location,currentTemp));
+		}
+	}
+	return true;
 }
 
 //functions
@@ -995,6 +1015,10 @@ int main(int argc, char* argv[]) {
 
     if(!g_initFailed) {
 		create_string_maps();
+		if(!init_RoomSetpoints()) {
+			std::cerr << "Something went wrong configuring the Rooms";
+			return 0;
+		}
 		Manager::Get()->WriteConfig(g_homeId);
 
 		Driver::DriverData data;
@@ -1237,42 +1261,33 @@ std::string process_commands(std::string data) {
 			
 			break;
 		}
-		case Room:
+		case Room: //restructure this to prevent sending multiple messages
 		{
 			if(v.size() != 3) {
 				throw ProtocolException(2, "Wrong number of arguments");
 			}
-			std::cout << "hoi";
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-				if(strcmp(Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId).c_str(), trim(v[2].c_str()).c_str()) != 0) {
+				std::string location = Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId);
+				if(strcmp(location.c_str(), trim(v[2].c_str()).c_str()) != 0) {
 					continue;
 				}
 				if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*it)->m_nodeId).c_str(), "Setpoint Thermostat") !=0) {
 					continue;
 				}
-				float currentTemp=0.0;
-				for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
-					if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") !=0) {
-						continue;
-					}
-					if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
-						throw ProtocolException(5, "Error while parsing command");
-					}
-				}
 				switch(s_mapStringCommands[trim(v[1].c_str())])
 				{
 					case Plus:
-						currentTemp += 0.5;
+						RoomSetpoints[location] += 0.5;
 						break;
 					case Minus:
-						currentTemp -= 0.5;
+						RoomSetpoints[location] -= 0.5;
 						break;
 					default:
 						throw ProtocolException(1, "Unknown Room command");
 						break;
 				}
 				stringstream ssCurrentTemp;
-				ssCurrentTemp << currentTemp;
+				ssCurrentTemp << RoomSetpoints[location];
 				uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
 				string err_message = "";
 				if(!SetValue(g_homeId, (*it)->m_nodeId, ssCurrentTemp.str(), cmdclass, "Heating 1", err_message)) {
