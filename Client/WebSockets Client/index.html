@@ -3,6 +3,7 @@
 <html>
     <head>
 		<link type="text/css" rel="stylesheet" href="http://code.jquery.com/ui/1.10.4/themes/smoothness/jquery-ui.css"/>
+		<link type="text/css" rel="stylesheet" href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css"/>
 		<link type="text/css" rel="stylesheet" href="stylesheet.css"/>
         <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
 		<script src="http://code.jquery.com/ui/1.10.4/jquery-ui.min.js"></script>
@@ -10,33 +11,51 @@
 		<script src="http://cdn.jsdelivr.net/justgage/1.0.1/justgage.min.js"></script>
         </head>
     <body>
-        <h1>Open-Zwave client</h1>
-		<h2>Websocket status</h2>
-        <input type="text" />
-        <button id="Send">Send Test Message</button>
-        <div id="content">
-			<div class="Rooms">
-			</div>
-			<div class="room-content">
-				<div id="tabs" class="tabs-bottom">
-					<ul>
-						<li><a href="#tab-devices">Devices</a></li>
-						<li><a href="#tab-temperature">Temperature</a></li>
-					</ul>
-					<div class="tabs-spacer"></div>
-					<div id="tab-devices"></div>
-					<div id="tab-temperature">
-						<div class="temp-buttons">
-							<div class="temp-button">
-								<button id="plus-button">+</button>
+		<div id="menu" class="menu-container">
+			<ul class="navigation">
+				<li>
+					<a href="#" class="to top">
+						<i class="fa fa-lightbulb-o"></i>
+						<span>Rooms</span>
+					</a>
+				</li>
+				<li>
+					<a href="#" class="to bottom">
+						<i class="fa fa-cog"></i>
+						<span>Controller</span>
+					</a>
+				</li>
+			</ul>
+		</div>
+		<div id="rest">
+			<h1>Open-Zwave client</h1>
+			<h2>Websocket status</h2>
+			<input type="text" />
+			<button id="Send">Send Test Message</button>
+			<div id="content">
+				<div class="Rooms">
+				</div>
+				<div class="room-content">
+					<div id="tabs" class="tabs-bottom">
+						<ul>
+							<li><a href="#tab-devices">Devices</a></li>
+							<li><a href="#tab-temperature">Temperature</a></li>
+						</ul>
+						<div class="tabs-spacer"></div>
+						<div id="tab-devices"></div>
+						<div id="tab-temperature">
+							<div class="temp-buttons">
+								<div class="temp-button">
+									<button id="plus-button">+</button>
+								</div>
+								<div class="temp-button">
+									<button id="minus-button">-</button>
+								</div>
 							</div>
-							<div class="temp-button">
-								<button id="minus-button">-</button>
+							<div class="gauges">
+								<div class="gauge" id="current-temp"></div>
+								<div class="gauge" id="setpoint-temp"></div>
 							</div>
-						</div>
-						<div class="gauges">
-							<div class="gauge" id="current-temp"></div>
-							<div class="gauge" id="setpoint-temp"></div>
 						</div>
 					</div>
 				</div>

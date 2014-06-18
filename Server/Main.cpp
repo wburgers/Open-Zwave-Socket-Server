@@ -203,17 +203,23 @@ void create_string_maps() {
 bool init_RoomSetpoints() {
 	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 		std::string location = Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId);
-		if(RoomSetpoints.find(location) == RoomSetpoints.end()) {
-			float currentTemp=0.0;
-			for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
-				if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") !=0) {
-					continue;
-				}
-				if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
-					return false;
-				}
+		
+		float currentTemp=20.0;
+		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
+			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") !=0) {
+				continue;
 			}
+			if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
+				return false;
+			}
+		}
+		
+		if(RoomSetpoints.find(location) == RoomSetpoints.end()) {
+			
 			RoomSetpoints.insert(std::pair<std::string, float>(location,currentTemp));
+		}
+		else {
+			RoomSetpoints.at(location) = currentTemp;
 		}
 	}
 	return true;
