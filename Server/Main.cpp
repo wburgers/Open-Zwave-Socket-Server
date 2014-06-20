@@ -325,13 +325,44 @@ void OnNotification(Notification const* _notification, void* _context) {
 			// One of the node values has changed
 			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
 				nodeInfo->m_LastSeen = time( NULL );
-				for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
-                    if((*it) == _notification->GetValueID()) {
-                        nodeInfo->m_values.erase(it);
+				ValueID vid = _notification->GetValueID();
+				for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
+                    if((*vit) == vid) {
+                        nodeInfo->m_values.erase(vit);
                         break;
                     }
                 }
-				nodeInfo->m_values.push_back(_notification->GetValueID());
+				nodeInfo->m_values.push_back(vid);
+				
+				uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
+				if(vid.GetCommandClassId() == cmdclass) {
+					std::string location = Manager::Get()->GetNodeLocation(_notification->GetHomeId(), _notification->GetNodeId());
+					float currentSetpoint = 20.00;
+					if(Manager::Get()->GetValueAsFloat(vid,&currentSetpoint)) {
+						if(RoomSetpoints[location] != currentSetpoint) {
+							RoomSetpoints.at(location) = currentSetpoint;
+							std::cout << "Changing room temp for room " << location << endl;
+							
+							for(list<NodeInfo*>::iterator nit = g_nodes.begin(); nit != g_nodes.end(); ++nit) {
+								if(_notification->GetHomeId() == (*nit)->m_homeId && _notification->GetNodeId() == (*nit)->m_nodeId) {
+									continue;
+								}
+								if(strcmp(location.c_str(), Manager::Get()->GetNodeLocation(g_homeId, (*nit)->m_nodeId).c_str()) != 0) {
+									continue;
+								}
+								if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*nit)->m_nodeId).c_str(), "Setpoint Thermostat") !=0) {
+									continue;
+								}
+								stringstream ssCurrentTemp;
+								ssCurrentTemp << RoomSetpoints[location];
+								string err_message = "";
+								if(!SetValue(g_homeId, (*nit)->m_nodeId, ssCurrentTemp.str(), cmdclass, "Heating 1", err_message)) {
+									std::cout << err_message;
+								}
+							}
+						}
+					}
+				}
 				
 				//test for notifications
 				std::string WSnotification = "Notification: ValueChanged";
@@ -857,6 +888,9 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			break;
 		}
 		case LWS_CALLBACK_RECEIVE: {
+			// log what we recieved.
+			printf("received data: %s\n", (char*) in);
+			
 			std::string command = (char*) in;
 			vector<string> v;
 			split(command, "~", v);
@@ -879,9 +913,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 
 			// send the response
 			libwebsocket_write(wsi, (unsigned char *)response.c_str(), response.length(), LWS_WRITE_TEXT);
-
-			// log what we recieved.
-			printf("received data: %s\n", (char*) in);
+			
 			break;
 		}
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
