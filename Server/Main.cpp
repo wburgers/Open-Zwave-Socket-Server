@@ -1318,7 +1318,7 @@ std::string process_commands(std::string data) {
 			
 			break;
 		}
-		case RoomC: //restructure this to prevent sending multiple messages
+		case RoomC:
 		{
 			if(v.size() != 3) {
 				throw ProtocolException(2, "Wrong number of arguments");
