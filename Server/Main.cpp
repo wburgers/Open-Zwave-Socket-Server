@@ -103,6 +103,7 @@ struct Alarm {
 struct Room {
 	std::string		name;
 	float 			setpoint;
+	float			currentTemp;
 	bool			changed;
 	bool operator<(Room const &other) { return strcmp(name.c_str(), other.name.c_str()) < 0; }
 	bool operator==(Room const &other) { return (strcmp(name.c_str(), other.name.c_str()) == 0); }
@@ -129,13 +130,18 @@ struct libwebsocket_context *context;
 //static bool notificationList_empty = true;
 //static pthread_mutex_t g_notificationListMutex;
 
+//-----------------------------------------------------------------------------
+// definitions
+//-----------------------------------------------------------------------------
+#define SOCKET_COLLECTION_TIMEOUT 15
+
 static bool stopping = false;
 static Socket* server;
 static Configuration* conf;
 
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
-static bool atHome = true;
+static bool atHome = false;
 static bool alarmset = false;
 static list<Alarm> alarmList;
 static list<Room> roomList;
@@ -145,7 +151,7 @@ static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, SetNode, RoomC, Plus, Minus, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
+enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
@@ -156,6 +162,7 @@ static std::map<std::string, int> MapCommandClassBasic;
 void create_string_maps() {
 	s_mapStringCommands["ALIST"] = AList;
 	s_mapStringCommands["SETNODE"] = SetNode;
+	s_mapStringCommands["ROOMLIST"] = RoomListC;
 	s_mapStringCommands["ROOM"] = RoomC;
 	s_mapStringCommands["PLUS"] = Plus;
 	s_mapStringCommands["MINUS"] = Minus;
@@ -215,25 +222,51 @@ void create_string_maps() {
 bool init_Rooms() {
 	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 		std::string location = Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId);
+		if(location.empty()) {
+			continue;
+		}
 		
-		float currentTemp=20.0;
+		float currentSetpoint=0.0;
+		float currentTemp=0.0;
 		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
-			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") !=0) {
-				continue;
+			if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*it)->m_nodeId).c_str(), "Setpoint Thermostat") ==0 && strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") == 0) {
+				if(!Manager::Get()->GetValueAsFloat(*vit, &currentSetpoint)) {
+					return false;
+				}
 			}
-			if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
-				return false;
+			else if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Temperature") == 0) {
+				if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
+					return false;
+				}
 			}
 		}
 		
+		std::cout << "currenttemp " << currentTemp <<endl;
+		
 		Room newroom;
 		newroom.name = location;
-		newroom.setpoint = currentTemp;
+		newroom.setpoint = currentSetpoint;
+		newroom.currentTemp = currentTemp;
 		newroom.changed = false;
 		
-		roomList.push_back(newroom);
-		roomList.sort();
-		roomList.unique();
+		list<Room>::iterator rit;
+		for(rit = roomList.begin(); rit != roomList.end(); ++rit)
+		{
+			if((*rit)==newroom)
+				break;
+		}
+		if ( rit != roomList.end() )
+		{
+			if(currentSetpoint!=0.0) {
+				rit->setpoint = currentSetpoint;
+			}
+			if(currentTemp!=0.0) {
+				rit->currentTemp = currentTemp;
+			}
+		}
+		else {
+			roomList.push_back(newroom);
+		}
 	}
 	
 	return true;
@@ -348,8 +381,7 @@ void OnNotification(Notification const* _notification, void* _context) {
                 }
 				nodeInfo->m_values.push_back(vid);
 				
-				uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
-				if(vid.GetCommandClassId() == cmdclass) {
+				if(strcmp(Manager::Get()->GetNodeType(_notification->GetHomeId(), _notification->GetNodeId()).c_str(), "Setpoint Thermostat") == 0 && strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Heating 1") == 0) {
 					std::string location = Manager::Get()->GetNodeLocation(_notification->GetHomeId(), _notification->GetNodeId());
 					float currentSetpoint = 20.00;
 					if(Manager::Get()->GetValueAsFloat(vid,&currentSetpoint)) {
@@ -359,7 +391,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 							}
 							if(rit->setpoint != currentSetpoint) {
 								rit->setpoint = currentSetpoint;
-								std::cout << "Changing room temp for room " << location << endl;
+								std::cout << "Changing setpoint for room " << location << endl;
 								
 								for(list<NodeInfo*>::iterator nit = g_nodes.begin(); nit != g_nodes.end(); ++nit) {
 									if(_notification->GetHomeId() == (*nit)->m_homeId && _notification->GetNodeId() == (*nit)->m_nodeId) {
@@ -374,10 +406,25 @@ void OnNotification(Notification const* _notification, void* _context) {
 									stringstream ssCurrentTemp;
 									ssCurrentTemp << rit->setpoint;
 									string err_message = "";
-									if(!SetValue(g_homeId, (*nit)->m_nodeId, ssCurrentTemp.str(), cmdclass, "Heating 1", err_message)) {
+									if(!SetValue(g_homeId, (*nit)->m_nodeId, ssCurrentTemp.str(), COMMAND_CLASS_THERMOSTAT_SETPOINT, "Heating 1", err_message)) {
 										std::cout << err_message;
 									}
 								}
+							}
+						}
+					}
+				}
+				else if(Manager::Get()->GetValueLabel(vid).c_str(), "Temperature") {
+					std::string location = Manager::Get()->GetNodeLocation(_notification->GetHomeId(), _notification->GetNodeId());
+					float currentTemp = 20.00;
+					if(Manager::Get()->GetValueAsFloat(vid,&currentTemp)) {
+						for(list<Room>::iterator rit=roomList.begin(); rit!=roomList.end(); ++rit) {
+							if(strcmp(location.c_str(), rit->name.c_str()) != 0) {
+								continue;
+							}
+							if(rit->currentTemp != currentTemp) {
+								rit->currentTemp = currentTemp;
+								std::cout << "Changing current temp for room " << location << endl;
 							}
 						}
 					}
@@ -1237,18 +1284,18 @@ std::string process_commands(std::string data) {
 	{
 		case AList:
 		{
-			string device;
+			std::string device;
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				NodeInfo* nodeInfo = *it;
 				int nodeID = nodeInfo->m_nodeId;
 				
-				string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
-				string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
-				string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
-				string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
+				std::string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+				std::string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
+				std::string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
+				std::string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
 										//The point of this was to help me figure out what the node values looked like
 				for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
-					string tempstr="";
+					std::string tempstr="";
 					Manager::Get()->GetValueAsString(*vit,&tempstr);
 					tempstr= "="+tempstr;
 					//hack to delimit values .. need to properly escape all values
@@ -1272,7 +1319,7 @@ std::string process_commands(std::string data) {
 					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeLastSeen.str() + "~" + ssNodeValue.str() + "#";
 				}
 			}
-			device = device.substr(0, device.size() - 1) + "\n";                           
+			device = device.substr(0, device.size() - 1) + "\n";
 			std::cout << "Sent Device List \n";
 			output += device;
 			break;
@@ -1318,6 +1365,21 @@ std::string process_commands(std::string data) {
 			
 			break;
 		}
+		case RoomListC:
+		{
+			std::string room;
+			stringstream setpoint, currentTemp;
+			for(list<Room>::iterator rit=roomList.begin(); rit!=roomList.end(); ++rit) {
+				setpoint.str("");
+				currentTemp.str("");
+				setpoint << rit->setpoint;
+				currentTemp << rit->currentTemp;
+				room += "ROOM~"+rit->name+"~"+setpoint.str()+"~"+currentTemp.str()+"#";
+			}
+			room = room.substr(0, room.size() - 1) + "\n";
+			output += room;
+			break;
+		}
 		case RoomC:
 		{
 			if(v.size() != 3) {
@@ -1343,14 +1405,19 @@ std::string process_commands(std::string data) {
 						throw ProtocolException(1, "Unknown Room command");
 						break;
 				}
-				
+				stringstream setpoint;
+				setpoint << rit->setpoint;
+				output += location + "~" + setpoint.str() + "\n";
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
 			
 			Alarm thermostatAlarm;
 			thermostatAlarm.description = "Thermostat";
 			time_t now = time(NULL);
-			thermostatAlarm.alarmtime = now+10;
+			thermostatAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
+			
+			while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
+				{alarmList.pop_front();}
 			
 			alarmList.push_back(thermostatAlarm);
 			alarmList.sort();
