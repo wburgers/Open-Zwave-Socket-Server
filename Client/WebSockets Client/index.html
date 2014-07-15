@@ -70,6 +70,7 @@
 			var websocket;
 			var currentTemp;
 			var setpointTemp;
+			var currentRoom;
 			
             $(document).ready(function() {
 				stylizePage();
@@ -86,11 +87,16 @@
 						console.log("error: " + error.data);
 					};
 					websocket.onmessage = function (message) {
-						var response = message.data;
-						var splitresponse = response.split("|");
+						console.log(message.data);
+						var splitresponse = message.data.split("|");
 						var command = splitresponse[0];
-						console.log(command);
+						//console.log(command);
 						var commandSwitch = {
+							"UPDATE": function() {
+								websocket.send('ALIST');
+								websocket.send('ROOMLIST');
+								sleep(25, Refresh);
+							},
 							"ALIST": function() {
 								var devices = splitresponse[1].split("#");
 								$.each(devices, function(index, deviceString) {
@@ -109,13 +115,56 @@
 										LastSeen: splitDeviceString[5],
 										Values: values,
 									};
-									nodeInfo.push(device);
-									Rooms.push(splitDeviceString[3]);
+									var exists = false;
+									$.each(nodeInfo, function() {
+										if (this.ID == device.ID) {
+											this.Name = device.Name;
+											this.Location = device.Location;
+											this.Type = device.Type;
+											this.LastSeen = device.LastSeen;
+											this.Values = device.Values;
+											exists = true;
+										}
+									});
+									if(!exists) {	
+										nodeInfo.push(device);
+									}
 								});
-								Rooms = $.unique(Rooms);
+							},
+							"ROOMLIST": function() {
+								var roomlistresponse = splitresponse[1].split("#");
+								$.each(roomlistresponse, function(index, roomString) {
+									var splitRoomString = roomString.split("~");
+									var room = {
+										Name: splitRoomString[1],
+										currentSetpoint: splitRoomString[2],
+										currentTemp: splitRoomString[3],
+									};
+									var exists = false;
+									$.each(Rooms, function() {
+										if (this.Name == room.Name) {
+											this.currentSetpoint = room.currentSetpoint;
+											this.currentTemp = room.currentTemp;
+											exists = true;
+										}
+									});
+									if(!exists) {
+										Rooms.push(room);
+									}
+								});
+							},
+							"ROOM": function() {
+								var roomresponse = splitresponse[1].split("~");
+								$.each(Rooms, function() {
+									if (this.Name == roomresponse[0]) {
+										this.currentSetpoint = roomresponse[1];
+										this.currentTemp = roomresponse[2];
+									}
+								});
+								Refresh();
 							},
 							"SWITCH": function() {
-								alert( "boo baz :(" );
+								//alert( "boo baz :(" );
 							},
 							"default": function() {
 								//alert( "everything else is just ok" );
@@ -130,7 +179,7 @@
 						}
 					};
 					websocket.onclose = function (event) {
-						$('div').append(event.code + " " + event.reason + "<br />");
+						$('h2').html('Closed with code: ' + event.code + " " + event.reason + "<br />");
 					};
 				}
 				catch(exception) {
@@ -198,6 +247,7 @@
 			
 			function GetDeviceList() {
 				websocket.send('ALIST');
+				websocket.send('ROOMLIST');
 				
 				/*if(navigator.geolocation) {
 					navigator.geolocation.getCurrentPosition(
@@ -245,13 +295,15 @@
 			};
 			
 			function Display() {
-				$.each(Rooms, function(index, Room) {
-					$(".Rooms").append("<button class=\"Room\" id=\""+Room+"\">"+Room+"</button>");
+				$(".Rooms").html("");
+				$.each(Rooms, function(index, room) {
+					$(".Rooms").append("<button class=\"Room\" id=\""+room.Name+"\">"+room.Name+"</button>");
 				});
 				$("button").button();
 				$(".Room").click(function(e) {
 					e.preventDefault();
-					//console.log("Button clicked from class: "+e.currentTarget.id);
+					currentRoom = e.currentTarget.id;
+					
 					/* --------------------------------------------------
 						clear the current content
 					-------------------------------------------------- */
@@ -259,6 +311,13 @@
 					
 					var currentRoomTemp = 0;
 					var currentSetpoint = 0;
+					
+					$.each(Rooms, function(index, room) {
+						if(room.Name == e.currentTarget.id) {
+							currentRoomTemp = room.currentTemp;
+							currentSetpoint = room.currentSetpoint;
+						}
+					});
 					
 					/* --------------------------------------------------
 						add the switches/dimmers to the devices tab here
@@ -279,13 +338,6 @@
 								}
 							});
 						}
-						if(device.Location == e.currentTarget.id && device.Type == "Routing Multilevel Sensor") {
-							currentRoomTemp = device.Values.Temperature;
-							//$("#current-temp.lastseen").html("").append("Last seen at: "+device.LastSeen)
-						}
-						if(device.Location == e.currentTarget.id && device.Type == "Setpoint Thermostat") {
-							currentSetpoint = device.Values['Heating 1'];
-						}
 					});
 					
 					/* --------------------------------------------------
@@ -300,6 +352,28 @@
 					$("#minus-button").removeClass (function (index, css) {
 						return (css.match (/\broom-\S+/g) || []).join(' ');
 					}).addClass("room-"+e.currentTarget.id);
+				});
+			};
+			
+			function Refresh() {
+				// refresh the temperature tab
+				var currentRoomTemp = 0;
+				var currentSetpoint = 0;
+				$.each(Rooms, function(index, room) {
+					if(room.Name == currentRoom) {
+						currentRoomTemp = room.currentTemp;
+						currentSetpoint = room.currentSetpoint;
+					}
+				});
+				currentTemp.refresh(currentRoomTemp);
+				setpointTemp.refresh(currentSetpoint);
+				
+				//refresh the devices tab
+				$.each(nodeInfo, function(index, device) {
+					if(device.Location == currentRoom && device.Type == "Multilevel Power Switch") {
+						$("#"+device.ID+".currentLevel").empty().append(device.Values.Level);
+						$("#"+device.ID+".slider").slider( "option", "value", device.Values.Level);
+					}
 				});
 			};
         </script>

@@ -152,7 +152,7 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
 enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
-enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat};
+enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
@@ -183,6 +183,7 @@ void create_string_maps() {
 	s_mapStringTriggers["Sunrise"] = Sunrise;
 	s_mapStringTriggers["Sunset"] = Sunset;
 	s_mapStringTriggers["Thermostat"] = Thermostat;
+	s_mapStringTriggers["Update"] = Update;
 	
 	s_mapStringOptions["Name"] = Name;
 	s_mapStringOptions["Location"] = Location;
@@ -240,8 +241,6 @@ bool init_Rooms() {
 				}
 			}
 		}
-		
-		std::cout << "currenttemp " << currentTemp <<endl;
 		
 		Room newroom;
 		newroom.name = location;
@@ -431,20 +430,20 @@ void OnNotification(Notification const* _notification, void* _context) {
 				}
 				
 				//test for notifications
-				std::string WSnotification = "Notification: ValueChanged";
-				std::cout << "Adding notification to message list\n";
-								
-				ringbuffer[ringbuffer_head] = WSnotification;
-				if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
-					ringbuffer_head = 0;
-				}
-				else {
-					ringbuffer_head++;
-				}
+				Alarm updateAlarm;
+				updateAlarm.description = "Update";
+				time_t now = time(NULL);
+				updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
 				
-				for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
-					libwebsocket_callback_on_writable(context, (*it));
-				}
+				while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
+					{alarmList.pop_front();}
+				
+				alarmList.push_back(updateAlarm);
+				alarmList.sort();
+				alarmList.unique();
+				
+				signal(SIGALRM, sigalrm_handler);
+				alarm(alarmList.front().alarmtime - now);
 			}
 			break;
 		}
@@ -946,11 +945,10 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 	
 	// reason for callback
 	switch(reason) {
-		case LWS_CALLBACK_ESTABLISHED:
-		{
+		case LWS_CALLBACK_ESTABLISHED: {
 			pss->ringbuffer_tail = ringbuffer_head;
 			printf("connection established\n");
-			//g_wsis.push_back(wsi);
+			g_wsis.push_back(wsi);
 			break;
 		}
 		case LWS_CALLBACK_RECEIVE: {
@@ -992,10 +990,15 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			std::cout << "sent clientID: " << clientID << endl;*/
 			
 			while (pss->ringbuffer_tail != ringbuffer_head) {
-				n = libwebsocket_write(wsi, (unsigned char *)
-					   ringbuffer[pss->ringbuffer_tail].c_str(),
-					   ringbuffer[pss->ringbuffer_tail].length(),
-									LWS_WRITE_TEXT);
+				char buf[LWS_SEND_BUFFER_PRE_PADDING + ringbuffer[pss->ringbuffer_tail].length() + LWS_SEND_BUFFER_POST_PADDING];
+				
+				memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], ringbuffer[pss->ringbuffer_tail].c_str(),
+					   ringbuffer[pss->ringbuffer_tail].length());
+			
+				n = libwebsocket_write(wsi,
+					(unsigned char *) &buf[LWS_SEND_BUFFER_PRE_PADDING],
+					ringbuffer[pss->ringbuffer_tail].length(),
+					LWS_WRITE_TEXT);
 				if (n < 0) {
 					lwsl_err("ERROR %d writing to mirror socket\n", n);
 					return -1;
@@ -1026,16 +1029,15 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			}
 			break;
 		}
-		/*case LWS_CALLBACK_CLOSED: {
+		case LWS_CALLBACK_CLOSED: {
 			for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
 				if(wsi == (*it)) {
-					std::cout << "remove wsi" << endl;
+					std::cout << "Websocket client closed the connection" << endl;
 					g_wsis.erase(it);
-					std::cout << "henk" << endl;
 				}
 			}
 			break;
-		}*/
+		}
 		case LWS_CALLBACK_PROTOCOL_DESTROY: {
 			std::cout << "open-zwave protocol not used anymore" << endl;
 		}
@@ -1405,9 +1407,10 @@ std::string process_commands(std::string data) {
 						throw ProtocolException(1, "Unknown Room command");
 						break;
 				}
-				stringstream setpoint;
+				stringstream setpoint, currentTemp;
 				setpoint << rit->setpoint;
-				output += location + "~" + setpoint.str() + "\n";
+				currentTemp << rit->currentTemp;
+				output += location + "~" + setpoint.str() +"~"+currentTemp.str() + "\n";
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
 			
@@ -1738,6 +1741,7 @@ std::string process_commands(std::string data) {
 		case AlarmList:
 			for(list<Alarm>::iterator ait = alarmList.begin(); ait!=alarmList.end(); ait++) {
 				stringstream ssTime;
+				ssTime << ait->description << " ";
 				ssTime << ctime(&(ait->alarmtime));
 				output += ssTime.str();
 			}
@@ -2050,11 +2054,12 @@ void sigalrm_handler(int sig) {
 	alarmset = false;
 	Alarm currentAlarm = alarmList.front();
 	alarmList.pop_front();
-	if(atHome) {
-		switch(s_mapStringTriggers[currentAlarm.description])
+	
+	switch(s_mapStringTriggers[currentAlarm.description])
+	{
+		case Sunrise:
 		{
-			case Sunrise:
-			{
+			if(atHome) {
 				std::string morningScene;
 				conf->GetMorningScene(morningScene);
 				try {
@@ -2066,10 +2071,12 @@ void sigalrm_handler(int sig) {
 					std::cout << what << endl;
 					std::cout << "trigger went off, but no Scene is set for Sunrise" << endl;
 				}
-				break;
 			}
-			case Sunset:
-			{
+			break;
+		}
+		case Sunset:
+		{
+			if(atHome) {
 				std::string nightScene;
 				conf->GetNightScene(nightScene);
 				try {
@@ -2081,36 +2088,56 @@ void sigalrm_handler(int sig) {
 					std::cout << what << endl;
 					std::cout << "trigger went off, but no Scene is set for Sunset" << endl;
 				}
-				break;
 			}
-			case Thermostat:
-			{
-				for(list<Room>::iterator rit = roomList.begin(); rit != roomList.end(); ++rit) {
-					if(rit->changed) {
-						for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-							if(strcmp(rit->name.c_str(), Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId).c_str()) != 0) {
-								continue;
-							}
-							if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*it)->m_nodeId).c_str(), "Setpoint Thermostat") !=0) {
-								continue;
-							}
-							stringstream ssCurrentTemp;
-							ssCurrentTemp << rit->setpoint;
-							uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
-							string err_message = "";
-							if(!SetValue(g_homeId, (*it)->m_nodeId, ssCurrentTemp.str(), cmdclass, "Heating 1", err_message)) {
-								std::cout << err_message;
-							}
+			break;
+		}
+		case Thermostat:
+		{
+			for(list<Room>::iterator rit = roomList.begin(); rit != roomList.end(); ++rit) {
+				std::cout << "sending commands for room " << rit->name << endl;
+				if(rit->changed) {	
+					for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+						if(strcmp(rit->name.c_str(), Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId).c_str()) != 0) {
+							continue;
+						}
+						if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*it)->m_nodeId).c_str(), "Setpoint Thermostat") !=0) {
+							continue;
+						}
+						stringstream ssCurrentSetpoint;
+						ssCurrentSetpoint << rit->setpoint;
+						uint8 cmdclass = COMMAND_CLASS_THERMOSTAT_SETPOINT;
+						string err_message = "";
+						if(!SetValue(g_homeId, (*it)->m_nodeId, ssCurrentSetpoint.str(), cmdclass, "Heating 1", err_message)) {
+							std::cout << err_message;
 						}
 					}
 				}
-				break;
 			}
-			default:
-				// check if the description can be used as a Scene name
-				// if that fails, check if the description can be parsed as a command
 			break;
 		}
+		case Update:
+		{
+			std::string WSnotification = "UPDATE";
+			std::cout << "Adding notification to message list\n";
+							
+			ringbuffer[ringbuffer_head] = WSnotification;
+			if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
+				ringbuffer_head = 0;
+			}
+			else {
+				ringbuffer_head++;
+			}
+			
+			for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
+				libwebsocket_callback_on_writable(context, (*it));
+			}
+			break;
+		}
+		default:
+			std::cout << "wrong alarm description";
+			// check if the description can be used as a Scene name
+			// if that fails, check if the description can be parsed as a command
+		break;
 	}
 	
 	// more alarms on the alarmList? Set the next one (the list is already sorted...)
