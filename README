@@ -2,9 +2,16 @@ I forked this project from Thomas Loughlin (see the fork network).
 When I started, the server was buggy and crashed all the time.
 I decided to create a more stable and smarter server.
 
+Please note that the PHP client is no longer updated.
+I haven't changed the client that much since Thomas started with it.
+I want to have a client with "live" data.
+Websockets are ideal for this purpose.
+
 Most of my latest work will be in the Test branch.
 When merging the Test branch into Master, I want my server to be stable.
 
 This project is running on my Odroid. A more powerful devboard created by Hardkernel.
 
 Any comments or fixes are more than welcome.
+
+For installation information, please see the INSTALL file
