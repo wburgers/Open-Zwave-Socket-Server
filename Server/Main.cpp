@@ -1176,7 +1176,8 @@ int main(int argc, char* argv[]) {
 			catch(...) {
 				std::cout << "Other exception" << endl;
 			}
-			std::cout << "Caught an exception, resolve the issue and press ENTER to continue" << endl;
+			std::cout << "Either server is stopping or an exception is caught" << endl;
+			std::cout << "If an exception is caught, resolve the issue and press ENTER to continue" << endl;
 			std::cin.ignore();
 		}
     }
