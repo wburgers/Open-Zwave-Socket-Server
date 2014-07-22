@@ -117,7 +117,6 @@ struct Room {
 static std::string ringbuffer[MAX_MESSAGE_QUEUE];
 static int ringbuffer_head = 0;
 
-static list<struct libwebsocket*> g_wsis;
 struct libwebsocket_context *context;
 
 /*struct WSClient {
@@ -947,8 +946,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 	switch(reason) {
 		case LWS_CALLBACK_ESTABLISHED: {
 			pss->ringbuffer_tail = ringbuffer_head;
-			printf("connection established\n");
-			g_wsis.push_back(wsi);
+			std::cout << "WebSocket connection established" << endl;
 			break;
 		}
 		case LWS_CALLBACK_RECEIVE: {
@@ -1030,12 +1028,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			break;
 		}
 		case LWS_CALLBACK_CLOSED: {
-			for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
-				if(wsi == (*it)) {
-					std::cout << "Websocket client closed the connection" << endl;
-					g_wsis.erase(it);
-				}
-			}
+			std::cout << "Websocket client closed the connection" << endl;
 			break;
 		}
 		case LWS_CALLBACK_PROTOCOL_DESTROY: {
@@ -1141,7 +1134,7 @@ int main(int argc, char* argv[]) {
 			throw std::runtime_error("Unable to create thread");
 		}
 		else {
-			std::cout<< "Websocket starting" << endl;
+			std::cout << "Websocket starting" << endl;
 		}
 		
 		int port;
@@ -1173,7 +1166,7 @@ int main(int argc, char* argv[]) {
 						throw std::runtime_error("Unable to create thread");
 					}
 					else {
-						std::cout<< "Connection Created" << endl;
+						std::cout << "Socket connection established" << endl;
 					}
 				}
 			}
@@ -2128,9 +2121,7 @@ void sigalrm_handler(int sig) {
 				ringbuffer_head++;
 			}
 			
-			for(list<struct libwebsocket*>::iterator it = g_wsis.begin(); it != g_wsis.end(); ++it) {
-				libwebsocket_callback_on_writable(context, (*it));
-			}
+			libwebsocket_callback_on_writable_all_protocol(protocols+1);
 			break;
 		}
 		default:
