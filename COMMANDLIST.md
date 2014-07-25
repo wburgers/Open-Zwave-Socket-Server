@@ -6,9 +6,9 @@ This command has no parameters
 ### SETNODE
 With the SETNODE command, you can change specific values of a device.
 The following things can be set with a SETNODE command:
-	Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval and Battery_report
+	Name, Location, Level, Thermostat\_Setpoint, Polling, Wake\_up\_Interval and Battery_report
 
-For example, to set the name of node 2 to "living room lamp 1":
+For example, to set the name of node 2 to "living room lamp 1"
 	SETNODE~2~Name=living room lamp 1
 
 You can set multiple values for a single device in one SETNODE command. These are separated by "<>".
