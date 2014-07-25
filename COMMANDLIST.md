@@ -9,11 +9,13 @@ The following things can be set with a SETNODE command:
 	Name, Location, Level, Thermostat\_Setpoint, Polling, Wake\_up\_Interval and Battery_report
 
 For example, to set the name of node 2 to "living room lamp 1"
-	SETNODE~2~Name=living room lamp 1
-
+```
+SETNODE~2~Name=living room lamp 1
+```
 You can set multiple values for a single device in one SETNODE command. These are separated by "<>".
-	SETNODE~2~Name=living room lamp 1<>Location=living room
-
+```
+SETNODE~2~Name=living room lamp 1<>Location=living room
+```
 ### ROOMLIST
 Much like the ALIST, this is a list of locations in you zwave network.
 If you set the location of a device, a room is automatically created.
@@ -27,10 +29,13 @@ With a ROOM command the temperature for a room can be set to a certain level.
 The websocket client gives a nice example of the workings of this command.
 You already have a current setpoint for a room if you use radiator thermostats.
 By giving the
-	ROOM~PLUS~<location name>
+```
+ROOM~PLUS~<location name>
+```
 command, where location name is one of the locations you entered for a device, you can up the setpoint by 0.5 degrees.
-
-	ROOM~MINUS~<location name>
+```
+ROOM~MINUS~<location name>
+```
 lowers the setpoint by 0.5
 The server waits for 15 seconds before sending any command to a device in the network.
 This is done to collect all plusses and minusses such to not overflow the device with messages.
@@ -38,33 +43,46 @@ This is done to collect all plusses and minusses such to not overflow the device
 ### SCENE
 The SCENE command relates to all scene options in this program.
 You can create a scene:
-	SCENE~CREATE~<scene name>
-
+```
+SCENE~CREATE~<scene name>
+```
 You can add values to a scene:
-	SCENE~ADD~<scene name>~<node id>~60
+```
+SCENE~ADD~<scene name>~<node id>~60
+```
 Please note that this tries to add the valueid that is mapped to the basic command class.
 For switches, dimmers and thermostats, this works great.
 I have not tested it for other devices...
 
 You can remove values from a scene:
-	SCENE~REMOVE~<scene name>~<node id>
+```
+SCENE~REMOVE~<scene name>~<node id>
+```
 This will remove the node/value pair from the scene.
 
 You can activate a scene:
-	SCENE~ACTIVATE~<scene name>
+```
+SCENE~ACTIVATE~<scene name>
+```
 This will execute the scene and set all the proper values for the nodes.
 
 ### CONTROLLER
 With a CONTROLLER command, you can add or remove devices from your open-zwave network.
 To add a device to the network use:
-	CONTROLLER~ADD
+```
+CONTROLLER~ADD
+```
 
 To remove a device from the network use:
-	CONTROLLER~REMOVE
+```
+CONTROLLER~REMOVE
+```
 
 The above commands will lock the open-zwave functionality until completed.
 If you want to cancel one of the above commands, send:
-	CONTROLLER~CANCEL
+```
+CONTROLLER~CANCEL
+```
 
 I didn't have any failed nodes yet, so it was not needed to implement it yet.
 Maybe I will in the future.
@@ -84,6 +102,9 @@ Please note that when the server starts, it assumes you are away from home.
 
 ### POLLINTERVAL
 With the POLLINTERVAL command, you can set the poll interval in minutes.
+```
+POLLINTERVAL~15
+```
 The default poll interval is set to 30 minutes.
 Polling devices is off by default.
 Enable polling for a device with the SETNODE command.
