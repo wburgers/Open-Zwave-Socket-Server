@@ -54,12 +54,20 @@ You can activate a scene:
 	SCENE~ACTIVATE~<scene name>
 This will execute the scene and set all the proper values for the nodes.
 
-### CONTROLLER (incomplete)
+### CONTROLLER
 With a CONTROLLER command, you can add or remove devices from your open-zwave network.
-This feature is not complete.
-I only added the option to add devices.
+To add a device to the network use:
 	CONTROLLER~ADD
-If you want to remove them, create a pull request or use any other open-zwave program that does support this feature.
+
+To remove a device from the network use:
+	CONTROLLER~REMOVE
+
+The above commands will lock the open-zwave functionality until completed.
+If you want to cancel one of the above commands, send:
+	CONTROLLER~CANCEL
+
+I didn't have any failed nodes yet, so it was not needed to implement it yet.
+Maybe I will in the future.
 
 ### CRON
 This command sets internal alarms.

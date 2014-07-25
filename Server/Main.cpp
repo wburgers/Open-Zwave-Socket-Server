@@ -1610,13 +1610,27 @@ std::string process_commands(std::string data) {
 			{
 				case Add: {
 					string response = "false";
-					if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate))
+					if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate)) {
 						response = "true";
+					}
 					output += response;
 					break;
 				}
-				case Remove:
-				case Cancel:
+				case Remove: {
+					string response = "false";
+					if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_RemoveDevice, OnControllerUpdate)) {
+						response = "true";
+					}
+					output += response;
+					break;
+				}
+				case Cancel: {
+					if(Manager::Get()->CancelControllerCommand()) {
+						response = "true";
+					}
+					output += response;
+					break;
+				}
 				default:
 					break;
 			}
