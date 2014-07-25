@@ -126,8 +126,6 @@ struct libwebsocket_context *context;
 };*/
 
 //static int nextClientID = 0;
-//static bool notificationList_empty = true;
-//static pthread_mutex_t g_notificationListMutex;
 
 //-----------------------------------------------------------------------------
 // definitions
@@ -219,65 +217,15 @@ void create_string_maps() {
 	MapCommandClassBasic["0xa1"] = 0x71;
 }
 
-bool init_Rooms() {
-	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
-		std::string location = Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId);
-		if(location.empty()) {
-			continue;
-		}
-		
-		float currentSetpoint=0.0;
-		float currentTemp=0.0;
-		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
-			if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*it)->m_nodeId).c_str(), "Setpoint Thermostat") ==0 && strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") == 0) {
-				if(!Manager::Get()->GetValueAsFloat(*vit, &currentSetpoint)) {
-					return false;
-				}
-			}
-			else if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Temperature") == 0) {
-				if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
-					return false;
-				}
-			}
-		}
-		
-		Room newroom;
-		newroom.name = location;
-		newroom.setpoint = currentSetpoint;
-		newroom.currentTemp = currentTemp;
-		newroom.changed = false;
-		
-		list<Room>::iterator rit;
-		for(rit = roomList.begin(); rit != roomList.end(); ++rit)
-		{
-			if((*rit)==newroom)
-				break;
-		}
-		if ( rit != roomList.end() )
-		{
-			if(currentSetpoint!=0.0) {
-				rit->setpoint = currentSetpoint;
-			}
-			if(currentTemp!=0.0) {
-				rit->currentTemp = currentTemp;
-			}
-		}
-		else {
-			roomList.push_back(newroom);
-		}
-	}
-	
-	return true;
-}
-
 //functions
+bool init_Rooms();
 void *websockets_main(void* arg);
 void *run_socket(void* arg);
 std::string process_commands(std::string data);
-bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message);
-std::string switchAtHome();
-std::string activateScene(string sclabel);
 bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message);
+bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message);
+std::string activateScene(string sclabel);
+std::string switchAtHome();
 bool try_map_basic(int32 home, int32 node);
 void sigalrm_handler(int sig);
 
@@ -1058,17 +1006,11 @@ static struct libwebsocket_protocols protocols[] = {
     }
 };
 
-/******** DOSTUFF() *********************
- There is a separate instance of this function 
- for each connection.  It handles all communication
- once a connnection has been established.
- *****************************************/
-
 //-----------------------------------------------------------------------------
 // <main>
-// Create the driver and then wait
+// Create the driver, wait for the library to complete the initialization
+// Then create the socket server and the websocket server separately
 //-----------------------------------------------------------------------------
-
 int main(int argc, char* argv[]) {
 	conf = new Configuration();
 	pthread_mutexattr_t mutexattr;
@@ -1198,6 +1140,66 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
+//-----------------------------------------------------------------------------
+// init_Rooms
+// Create a list of rooms for the program to maintain
+// The roomlist is built from the devicelist information
+//-----------------------------------------------------------------------------
+bool init_Rooms() {
+	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+		std::string location = Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId);
+		if(location.empty()) {
+			continue;
+		}
+		
+		float currentSetpoint=0.0;
+		float currentTemp=0.0;
+		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
+			if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*it)->m_nodeId).c_str(), "Setpoint Thermostat") ==0 && strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Heating 1") == 0) {
+				if(!Manager::Get()->GetValueAsFloat(*vit, &currentSetpoint)) {
+					return false;
+				}
+			}
+			else if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Temperature") == 0) {
+				if(!Manager::Get()->GetValueAsFloat(*vit, &currentTemp)) {
+					return false;
+				}
+			}
+		}
+		
+		Room newroom;
+		newroom.name = location;
+		newroom.setpoint = currentSetpoint;
+		newroom.currentTemp = currentTemp;
+		newroom.changed = false;
+		
+		list<Room>::iterator rit;
+		for(rit = roomList.begin(); rit != roomList.end(); ++rit)
+		{
+			if((*rit)==newroom)
+				break;
+		}
+		if ( rit != roomList.end() )
+		{
+			if(currentSetpoint!=0.0) {
+				rit->setpoint = currentSetpoint;
+			}
+			if(currentTemp!=0.0) {
+				rit->currentTemp = currentTemp;
+			}
+		}
+		else {
+			roomList.push_back(newroom);
+		}
+	}
+	
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// websockets_main
+// Start the websocket server and keep the service thread running
+//-----------------------------------------------------------------------------
 void *websockets_main(void* arg) {
 	int port;
 	if(!conf->GetWSPort(port)) {
@@ -1241,6 +1243,11 @@ void *websockets_main(void* arg) {
 	return 0;
 }
 
+//-----------------------------------------------------------------------------
+// run_socket
+// Every new socket connection gets its own thread
+// This thread listens for commands on the socket connection
+//-----------------------------------------------------------------------------
 void *run_socket(void* arg) {
 	Socket thread_sock;
 	thread_sock.SetSock((int)arg);
@@ -1272,6 +1279,10 @@ void *run_socket(void* arg) {
 	}
 }
 
+//-----------------------------------------------------------------------------
+// process_commands
+// when a command comes in, parse it, execute it and send the response back
+//-----------------------------------------------------------------------------
 std::string process_commands(std::string data) {
 	vector<string> v;
 	split(data, "~", v);
@@ -1606,26 +1617,25 @@ std::string process_commands(std::string data) {
 		}
 		case ControllerC:
 		{
+			string response = "false";
 			switch(s_mapStringCommands[trim(v[1])])
 			{
 				case Add: {
-					string response = "false";
-					if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate)) {
+					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate)) {
 						response = "true";
 					}
 					output += response;
 					break;
 				}
 				case Remove: {
-					string response = "false";
-					if(Manager::Get()->BeginControllerCommand( g_homeId, Driver::ControllerCommand_RemoveDevice, OnControllerUpdate)) {
+					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_RemoveDevice, OnControllerUpdate)) {
 						response = "true";
 					}
 					output += response;
 					break;
 				}
 				case Cancel: {
-					if(Manager::Get()->CancelControllerCommand()) {
+					if(Manager::Get()->CancelControllerCommand(g_homeId)) {
 						response = "true";
 					}
 					output += response;
@@ -1769,158 +1779,10 @@ std::string process_commands(std::string data) {
 	return output;
 }
 
-bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message) {
-	err_message = "";
-	bool response;
-	bool cmdfound = false;
-	
-	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
-		// Find the correct instance
-		for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
-			int id = (*it).GetCommandClassId();
-			if(id != cmdclass) {
-				continue;
-			}
-
-			if(label != Manager::Get()->GetValueLabel(*it)) {
-				continue;
-			}
-			
-			switch((*it).GetType()) {
-				case ValueID::ValueType_Bool: {
-					response = Manager::Get()->SetValue(*it, lexical_cast<bool>(value));
-					cmdfound = true;
-					break;
-				}
-				case ValueID::ValueType_Byte: {
-					response = Manager::Get()->SetValue(*it, (uint8) lexical_cast<int>(value));
-					cmdfound = true;
-					break;
-				}
-				case ValueID::ValueType_Short: {
-					response = Manager::Get()->SetValue(*it, (uint16) lexical_cast<int>(value));
-					cmdfound = true;
-					break;
-				}
-				case ValueID::ValueType_Int: {
-					response = Manager::Get()->SetValue(*it, lexical_cast<int>(value));
-					cmdfound = true;
-					break;
-				}
-				case ValueID::ValueType_Decimal: {
-					response = Manager::Get()->SetValue(*it, lexical_cast<float>(value));
-					cmdfound = true;
-					break;
-				}
-				case ValueID::ValueType_List: {
-					response = Manager::Get()->SetValueListSelection(*it, value);
-					cmdfound = true;
-					break;
-				}
-				default:
-					err_message += "unknown ValueType | ";
-					return false;
-					break;
-			}
-		}
-
-		if(!cmdfound) {
-			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL\n";
-			return false;
-		}
-	}
-	else {
-		//WriteLog( LogLevel_Debug, false, "Return=false (node doesn't exist)" );
-		err_message += "node doesn't exist";
-		response = false;
-	}
-
-	return response;
-}
-
-std::string switchAtHome() {
-	time_t sunrise = 0, sunset = 0;
-	float lat, lon;
-	std::string output = "";
-	if(!conf->GetLocation(lat, lon)) {
-		output += "Could not get the location from Config.ini\n";
-		return output;
-	}
-	if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
-		atHome = !atHome;
-		if(atHome) {
-			output += "Welcome home\n";
-			time_t now = time(NULL);
-			if(now > sunrise && now < sunset) {
-				// turn on the athome scene set by the user for the day
-				std::string dayScene;
-				conf->GetDayScene(dayScene);
-				try {
-					output += activateScene(dayScene);
-				}
-				catch (ProtocolException& e) {
-					std::string what = "ProtocolException: ";
-					what += e.what();
-					output += what + "\n";
-					output += "No dayScene is set, set it in Config.ini\n";
-				}
-			}
-			else {
-				// turn on the athome scene set by the user for the evening/night
-				std::string nightScene;
-				conf->GetNightScene(nightScene);
-				try {
-					output += activateScene(nightScene);
-				}
-				catch (ProtocolException& e) {
-					std::string what = "ProtocolException: ";
-					what += e.what();
-					output += what + "\n";
-					output += "No nightScene is set, set it in Config.ini\n";
-				}
-			}
-		}
-		else {
-			output += "Bye bye\n";
-			std::string awayScene;
-			conf->GetAwayScene(awayScene);
-			try {
-				output += activateScene(awayScene);
-			}
-			catch (ProtocolException& e) {
-				string what = "ProtocolException: ";
-				what += e.what();
-				output += what + "\n";
-				output += "No awayScene is set, set it in Config.ini\n";
-			}
-		}
-	}
-	return output;
-}
-
-std::string activateScene(std::string sclabel) {
-	uint8 numscenes = 0;
-	uint8 *sceneIds = new uint8[numscenes];
-	
-	sclabel = trim(sclabel);
-	
-	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-		throw ProtocolException(3, "No scenes created");
-	}
-	
-	int scid=0;
-	
-	for(int i=0; i<numscenes; ++i) {
-		scid = sceneIds[i];
-		if(sclabel != Manager::Get()->GetSceneLabel(scid)){
-			continue;
-		}
-		Manager::Get()->ActivateScene(scid);
-		return "Activate scene "+sclabel+"\n";
-	}
-	throw ProtocolException(4, "Scene not found");
-}
-
+//-----------------------------------------------------------------------------
+// parse_option
+// Parse options for the SETNODE command
+//-----------------------------------------------------------------------------
 bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message) {
 	err_message = "";
 	switch(s_mapStringOptions[name])
@@ -2032,6 +1894,175 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 	return false;
 }
 
+//-----------------------------------------------------------------------------
+// SetValue
+// set a certain value for a node in the open-zwave network
+//-----------------------------------------------------------------------------
+bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message) {
+	err_message = "";
+	bool response;
+	bool cmdfound = false;
+	
+	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
+		// Find the correct instance
+		for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
+			int id = (*it).GetCommandClassId();
+			if(id != cmdclass) {
+				continue;
+			}
+
+			if(label != Manager::Get()->GetValueLabel(*it)) {
+				continue;
+			}
+			
+			switch((*it).GetType()) {
+				case ValueID::ValueType_Bool: {
+					response = Manager::Get()->SetValue(*it, lexical_cast<bool>(value));
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Byte: {
+					response = Manager::Get()->SetValue(*it, (uint8) lexical_cast<int>(value));
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Short: {
+					response = Manager::Get()->SetValue(*it, (uint16) lexical_cast<int>(value));
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Int: {
+					response = Manager::Get()->SetValue(*it, lexical_cast<int>(value));
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_Decimal: {
+					response = Manager::Get()->SetValue(*it, lexical_cast<float>(value));
+					cmdfound = true;
+					break;
+				}
+				case ValueID::ValueType_List: {
+					response = Manager::Get()->SetValueListSelection(*it, value);
+					cmdfound = true;
+					break;
+				}
+				default:
+					err_message += "unknown ValueType | ";
+					return false;
+					break;
+			}
+		}
+
+		if(!cmdfound) {
+			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL\n";
+			return false;
+		}
+	}
+	else {
+		//WriteLog( LogLevel_Debug, false, "Return=false (node doesn't exist)" );
+		err_message += "node doesn't exist";
+		response = false;
+	}
+
+	return response;
+}
+
+//-----------------------------------------------------------------------------
+// activateScene
+// Try to activate a scene by its label/name
+//-----------------------------------------------------------------------------
+std::string activateScene(std::string sclabel) {
+	uint8 numscenes = 0;
+	uint8 *sceneIds = new uint8[numscenes];
+	
+	sclabel = trim(sclabel);
+	
+	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+		throw ProtocolException(3, "No scenes created");
+	}
+	
+	int scid=0;
+	
+	for(int i=0; i<numscenes; ++i) {
+		scid = sceneIds[i];
+		if(sclabel != Manager::Get()->GetSceneLabel(scid)){
+			continue;
+		}
+		Manager::Get()->ActivateScene(scid);
+		return "Activate scene "+sclabel+"\n";
+	}
+	throw ProtocolException(4, "Scene not found");
+}
+
+//-----------------------------------------------------------------------------
+// switchAtHome
+// Switch between the at home or away state
+// Activate the proper scene for the current state after switching
+//-----------------------------------------------------------------------------
+std::string switchAtHome() {
+	time_t sunrise = 0, sunset = 0;
+	float lat, lon;
+	std::string output = "";
+	if(!conf->GetLocation(lat, lon)) {
+		output += "Could not get the location from Config.ini\n";
+		return output;
+	}
+	if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
+		atHome = !atHome;
+		if(atHome) {
+			output += "Welcome home\n";
+			time_t now = time(NULL);
+			if(now > sunrise && now < sunset) {
+				// turn on the athome scene set by the user for the day
+				std::string dayScene;
+				conf->GetDayScene(dayScene);
+				try {
+					output += activateScene(dayScene);
+				}
+				catch (ProtocolException& e) {
+					std::string what = "ProtocolException: ";
+					what += e.what();
+					output += what + "\n";
+					output += "No dayScene is set, set it in Config.ini\n";
+				}
+			}
+			else {
+				// turn on the athome scene set by the user for the evening/night
+				std::string nightScene;
+				conf->GetNightScene(nightScene);
+				try {
+					output += activateScene(nightScene);
+				}
+				catch (ProtocolException& e) {
+					std::string what = "ProtocolException: ";
+					what += e.what();
+					output += what + "\n";
+					output += "No nightScene is set, set it in Config.ini\n";
+				}
+			}
+		}
+		else {
+			output += "Bye bye\n";
+			std::string awayScene;
+			conf->GetAwayScene(awayScene);
+			try {
+				output += activateScene(awayScene);
+			}
+			catch (ProtocolException& e) {
+				string what = "ProtocolException: ";
+				what += e.what();
+				output += what + "\n";
+				output += "No awayScene is set, set it in Config.ini\n";
+			}
+		}
+	}
+	return output;
+}
+
+//-----------------------------------------------------------------------------
+// try_map_basic
+// Try to map the basic command class for a node to the proper command class
+//-----------------------------------------------------------------------------
 bool try_map_basic(int32 home, int32 node) {
 	char buffer[10];
 	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {					
@@ -2058,6 +2089,11 @@ bool try_map_basic(int32 home, int32 node) {
 	return false;
 }
 
+//-----------------------------------------------------------------------------
+// sigalrm_handler
+// Gets invoked when a Alarm goes off
+// take apropriate action for the type of Alarm
+//-----------------------------------------------------------------------------
 void sigalrm_handler(int sig) {
 	alarmset = false;
 	Alarm currentAlarm = alarmList.front();
