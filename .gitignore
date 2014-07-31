@@ -4,6 +4,7 @@ OZW_log.txt
 make_log.txt
 zw*.xml
 */*.ini
+settings.js
 .DS_Store
 .idea/**
 
