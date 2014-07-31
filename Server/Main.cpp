@@ -1258,7 +1258,7 @@ void *run_socket(void* arg) {
 			thread_sock >> data;
 			
 			if(strcmp(data.c_str(), "") == 0){ //client closed the connection
-				std::cout << "Client closed the connection" << endl;
+				std::cout << "Socket client closed the connection" << endl;
 				return 0;
 			}
 			
@@ -1802,7 +1802,8 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 			Manager::Get()->SetNodeLocation(home, node, value);
 			pthread_mutex_unlock(&g_criticalSection);
 			save = true;
-			return true;
+			roomList.clear();
+			return init_Rooms(); //can do this more efficiently, patch welcome
 			break;
 		}
 		case Level:

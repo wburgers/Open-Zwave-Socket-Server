@@ -5,6 +5,7 @@
 		<link type="text/css" rel="stylesheet" href="http://code.jquery.com/ui/1.10.4/themes/smoothness/jquery-ui.css"/>
 		<link type="text/css" rel="stylesheet" href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css"/>
 		<link type="text/css" rel="stylesheet" href="stylesheet.css"/>
+		<script src="settings.js"></script>
         <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
 		<script src="http://code.jquery.com/ui/1.10.4/jquery-ui.min.js"></script>
 		<script src="http://cdn.jsdelivr.net/raphael/2.1.2/raphael-min.js"></script>
@@ -75,7 +76,7 @@
             $(document).ready(function() {
 				stylizePage();
 				
-                websocket = new WebSocket('ws://openzwave-server-ip:6005', 'open-zwave');
+                websocket = new WebSocket('ws://'+server_ip+':'+port, 'open-zwave');
 				try {
 					websocket.onopen = function () {
 						$('h2').html('Connected!');
