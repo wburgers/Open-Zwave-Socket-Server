@@ -1,7 +1,7 @@
 <?php
 session_start();
 define("ZWAVE_HOST", "localhost");
-define("ZWAVE_PORT", 6004);
+define("ZWAVE_PORT", 60004);
 
 function sendReceiveMessage($in)
 {
