@@ -13,6 +13,8 @@
     <link rel="import" href="bower_components/paper-menu-button/paper-menu-button.html">
     <link rel="import" href="bower_components/paper-input/paper-input.html">
     <link rel="import" href="bower_components/polymer-grid-layout/polymer-grid-layout.html">
+
+    <link rel="import" href="custom_components/status-dot.html">
     <style>
       html,body {
         height: 100%;
@@ -27,17 +29,11 @@
         background: #03a9f4;
         color: black;
       }
-      body {
-        font-family: sans-serif;
-      }
-      core-header-panel {
-        background: white;
-      }
-      core-toolbar {
-        background-color: #03A9F4;
-      }
       #navheader {
         background-color: #56BA89;
+      }
+      core-toolbar paper-input {
+        font-size: 1em;
       }
       .content {
         padding: 20px;
@@ -46,6 +42,11 @@
          so menu button isn't required */
       core-drawer-panel:not([narrow]) #navicon {
         display: none;
+      }
+    </style>
+    <style shim-shadowdom>
+      paper-input.narrow {
+        width: 150px;
       }
     </style>
   </head>
@@ -65,7 +66,8 @@
       <core-header-panel main>
         <core-toolbar id="mainheader">
           <paper-icon-button id="navicon" icon="menu"></paper-icon-button>
-          <span flex>Open-Zwave-Polymer-Client</span>
+          <span flex>Polymer-Client</span>
+          <status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
           <paper-input label="You can type commands here..."></paper-input>
           <paper-icon-button icon="arrow-forward"></paper-icon-button>
         </core-toolbar>
