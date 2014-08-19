@@ -1012,13 +1012,13 @@ int main(int argc, char* argv[]) {
 			std::cout << "Websocket starting" << endl;
 		}
 		
-		int port;
+		int tcpport;
 		
-		if(!conf->GetTCPPort(port)) {
+		if(!conf->GetTCPPort(tcpport)) {
 			std::cerr << "There is no TCP port set in Config.ini, please specify one and try again.\n";
 			return 0;
 		}
-		std::cout << "Starting TCP server on port: " << port << endl;
+		std::cout << "Starting TCP server on port: " << tcpport << endl;
 		
 		while(!stopping) {
 			try { // for all socket errors
@@ -1026,7 +1026,7 @@ int main(int argc, char* argv[]) {
 				if(!server->create()) {
 					throw SocketException ( "Could not create server socket." );
 				}
-				if(!server->bind(port)) {
+				if(!server->bind(tcpport)) {
 					throw SocketException ( "Could not bind to port." );
 				}
 				if(!server->listen()) {
