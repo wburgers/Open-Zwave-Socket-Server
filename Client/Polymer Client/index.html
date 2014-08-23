@@ -2,6 +2,7 @@
 <html>
   <head>
     <script src="bower_components/platform/platform.js"></script>
+    <script src="settings.js"></script>
     <link rel="import" href="bower_components/core-toolbar/core-toolbar.html">
     <link rel="import" href="bower_components/core-menu/core-menu.html">
     <link rel="import" href="bower_components/core-item/core-item.html">
@@ -12,7 +13,6 @@
     <link rel="import" href="bower_components/paper-icon-button/paper-icon-button.html">
     <link rel="import" href="bower_components/paper-menu-button/paper-menu-button.html">
     <link rel="import" href="bower_components/paper-input/paper-input.html">
-    <link rel="import" href="bower_components/polymer-grid-layout/polymer-grid-layout.html">
 
     <link rel="import" href="custom_components/status-dot.html">
     <style>
@@ -77,6 +77,9 @@
       </core-header-panel>
     </core-drawer-panel>
     <script>
+      window.WebSocket = window.WebSocket || window.MozWebSocket;
+      var websocket;
+      
       document.addEventListener('polymer-ready', function() {
         var navicon = document.getElementById('navicon');
         var drawerPanel = document.getElementById('drawerPanel');
