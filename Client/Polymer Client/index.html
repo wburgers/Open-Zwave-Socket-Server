@@ -1,96 +1,220 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <script src="bower_components/platform/platform.js"></script>
-    <script src="settings.js"></script>
-    <link rel="import" href="bower_components/core-toolbar/core-toolbar.html">
-    <link rel="import" href="bower_components/core-menu/core-menu.html">
-    <link rel="import" href="bower_components/core-item/core-item.html">
-    <link rel="import" href="bower_components/core-header-panel/core-header-panel.html">
-    <link rel="import" href="bower_components/core-drawer-panel/core-drawer-panel.html">
-    <link rel="import" href="bower_components/font-roboto/roboto.html">
-    <link rel="import" href="bower_components/core-icons/core-icons.html">
-    <link rel="import" href="bower_components/paper-icon-button/paper-icon-button.html">
-    <link rel="import" href="bower_components/paper-menu-button/paper-menu-button.html">
-    <link rel="import" href="bower_components/paper-input/paper-input.html">
-
-    <link rel="import" href="custom_components/status-dot.html">
-    <style>
-      html,body {
-        height: 100%;
-        margin: 0;
-        background-color: #E5E5E5;
-        font-family: 'Roboto2', sans-serif;
-      }
-      core-header-panel {
-        height: 100%;
-      }
-      core-toolbar {
-        background: #03a9f4;
-        color: black;
-      }
-      #navheader {
-        background-color: #56BA89;
-      }
-      core-toolbar paper-input {
-        font-size: 1em;
-      }
-      .content {
-        padding: 20px;
-      }
-      /* drawer is always visible on a wide screen
-         so menu button isn't required */
-      core-drawer-panel:not([narrow]) #navicon {
-        display: none;
-      }
-    </style>
-    <style shim-shadowdom>
-      paper-input.narrow {
-        width: 150px;
-      }
-    </style>
-  </head>
-  <body unresolved>
-    <core-drawer-panel  responsiveWidth="980px" id="drawerPanel">
-      <core-header-panel drawer>
-        <core-toolbar id="navheader'">
-          <span>Menu</span>
-        </core-toolbar>
-        <core-menu selected="0">
-          <core-item label="Rooms"></core-item>
-          <core-item label="Scenes"></core-item>
-          <core-item label="Controller"></core-item>
-        </core-menu>
-      </core-header-panel>
-
-      <core-header-panel main>
-        <core-toolbar id="mainheader">
-          <paper-icon-button id="navicon" icon="menu"></paper-icon-button>
-          <span flex>Polymer-Client</span>
-          <status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
-          <paper-input label="You can type commands here..."></paper-input>
-          <paper-icon-button icon="arrow-forward"></paper-icon-button>
-        </core-toolbar>
-        <div class="content">
-          
-        </div>
-      </core-header-panel>
-    </core-drawer-panel>
-    <script>
-      window.WebSocket = window.WebSocket || window.MozWebSocket;
-      var websocket;
-      
-      document.addEventListener('polymer-ready', function() {
-        var navicon = document.getElementById('navicon');
-        var drawerPanel = document.getElementById('drawerPanel');
-        navicon.addEventListener('click', function() {
-          drawerPanel.togglePanel();
-        });
-        var menu = document.querySelector('core-menu');
-	menu.addEventListener('core-select', function() {
-          alert(menu.selected);
-        });
-      });
-    </script>
-  </body>
+	<head>
+		<script src="bower_components/platform/platform.js"></script>
+		<script src="settings.js"></script>
+		<link rel="import" href="bower_components/core-toolbar/core-toolbar.html">
+		<link rel="import" href="bower_components/core-menu/core-menu.html">
+		<link rel="import" href="bower_components/core-item/core-item.html">
+		<link rel="import" href="bower_components/core-header-panel/core-header-panel.html">
+		<link rel="import" href="bower_components/core-drawer-panel/core-drawer-panel.html">
+		<link rel="import" href="bower_components/font-roboto/roboto.html">
+		<link rel="import" href="bower_components/core-icons/core-icons.html">
+		<link rel="import" href="bower_components/paper-icon-button/paper-icon-button.html">
+		<link rel="import" href="bower_components/paper-menu-button/paper-menu-button.html">
+		<link rel="import" href="bower_components/paper-input/paper-input.html">
+		
+		<link rel="import" href="custom_components/status-dot.html">
+		
+		<style>
+			html,body {
+				height: 100%;
+				margin: 0;
+				background-color: #E5E5E5;
+				font-family: 'Roboto2', sans-serif;
+			}
+			core-header-panel {
+				height: 100%;
+			}
+			core-toolbar {
+				background: #03a9f4;
+				color: black;
+			}
+			#navheader {
+				background-color: #56BA89;
+			}
+			core-toolbar paper-input {
+				font-size: 1em;
+			}
+			.content {
+				padding: 20px;
+			}
+			/* drawer is always visible on a wide screen
+			so menu button isn't required */
+			core-drawer-panel:not([narrow]) #navicon {
+				display: none;
+			}
+		</style>
+	</head>
+	<body unresolved>
+		<core-drawer-panel  responsiveWidth="980px" id="drawerPanel">
+			<core-header-panel drawer>
+				<core-toolbar id="navheader'">
+					<span>Menu</span>
+				</core-toolbar>
+				<core-menu selected="0">
+					<core-item label="Rooms"></core-item>
+					<core-item label="Scenes"></core-item>
+					<core-item label="Controller"></core-item>
+				</core-menu>
+			</core-header-panel>
+			
+			<core-header-panel main>
+				<core-toolbar id="mainheader">
+					<paper-icon-button id="navicon" icon="menu"></paper-icon-button>
+					<span flex>Polymer-Client</span>
+					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
+					<paper-input label="You can type commands here..."></paper-input>
+					<paper-icon-button icon="arrow-forward"></paper-icon-button>
+				</core-toolbar>
+				<div class="content">
+				
+				</div>
+			</core-header-panel>
+		</core-drawer-panel>
+		<script>
+			/*
+			initialize some vars
+			*/
+			window.WebSocket = window.WebSocket || window.MozWebSocket;
+			var websocket;
+			var websocket_status;
+			var nodeInfo = [];
+			var Rooms = [];
+			
+			document.addEventListener('polymer-ready', function() {
+				/*
+				register buttonsclicks to actions
+				*/
+				var navicon = document.getElementById('navicon');
+				var drawerPanel = document.getElementById('drawerPanel');
+				navicon.addEventListener('click', function() {
+					drawerPanel.togglePanel();
+				});
+				var menu = document.querySelector('core-menu');
+				menu.addEventListener('core-select', function() {
+					alert(menu.selected);
+				});
+				
+				websocket_status = document.getElementById('websocket-status');
+				open_websocket();
+			});
+			
+			function open_websocket() {
+				websocket = new WebSocket('ws://'+server_ip+':'+port, 'open-zwave');
+				try {
+					websocket.onopen = function () {
+						websocket_status.color = 'green';
+						websocket_status.status = 'Connected';
+						//Init();
+						//GetDeviceList();
+					};
+					websocket.onerror = function (error) {
+						websocket_status.color = 'red';
+						websocket_status.status = 'Error<br>Check console';
+						console.log("error: " + error.data);
+					};
+					websocket.onmessage = function (message) {
+						console.log(message.data);
+						var splitresponse = message.data.split("|");
+						var command = splitresponse[0];
+						//console.log(command);
+						var commandSwitch = {
+							"UPDATE": function() {
+								websocket.send('ALIST');
+								websocket.send('ROOMLIST');
+								//sleep(25, Refresh);
+							},
+							"ALIST": function() {
+								var devices = splitresponse[1].split("#");
+								devices.forEach( function(deviceString) {
+									var splitDeviceString = deviceString.split("~");
+									var splitValueString = splitDeviceString[6].split("<>");
+									var values = {};
+									splitValueString.forEach( function(valueString) {
+										var keyvaluepair = valueString.split("=");
+										values[keyvaluepair[0]] = keyvaluepair[1];
+									});
+									var device = {
+										Name: splitDeviceString[1],
+										ID: splitDeviceString[2],
+										Location: splitDeviceString[3],
+										Type: splitDeviceString[4],
+										LastSeen: splitDeviceString[5],
+										Values: values,
+									};
+									var exists = false;
+									
+									nodeInfo.forEach( function(node) {
+										if (node.ID == device.ID) {
+											node.Name = device.Name;
+											node.Location = device.Location;
+											node.Type = device.Type;
+											node.LastSeen = device.LastSeen;
+											node.Values = device.Values;
+											exists = true;
+										}
+									});
+									if(!exists) {	
+										nodeInfo.push(device);
+									}
+								});
+							},
+							"ROOMLIST": function() {
+								var roomlistresponse = splitresponse[1].split("#");
+								roomlistresponse.forEach( function(roomString) {
+									var splitRoomString = roomString.split("~");
+									var room = {
+										Name: splitRoomString[1],
+										currentSetpoint: splitRoomString[2],
+										currentTemp: splitRoomString[3],
+									};
+									var exists = false;
+									Rooms.forEach( function(roomitem) {
+										if (roomitem.Name == room.Name) {
+											roomitem.currentSetpoint = room.currentSetpoint;
+											roomitem.currentTemp = room.currentTemp;
+											exists = true;
+										}
+									});
+									if(!exists) {
+										Rooms.push(room);
+									}
+								});
+							},
+							"ROOM": function() {
+								var roomresponse = splitresponse[1].split("~");
+								Rooms.forEach( function(roomitem) {
+									if (roomitem.Name == roomresponse[0]) {
+										roomitem.currentSetpoint = roomresponse[1];
+										roomitem.currentTemp = roomresponse[2];
+									}
+								});
+								Refresh();
+							},
+							"SWITCH": function() {
+							},
+							"default": function() {
+							}
+						};
+						
+						if ( commandSwitch[command] ) {
+							commandSwitch[command]();
+						}
+						else {
+							commandSwitch["default"]();
+						}
+					};
+					websocket.onclose = function (event) {
+						websocket_status.color = 'red';
+						websocket_status.status = 'Closed<br>Check console';
+						console.log("Closed with code: " + event.code + " " + event.reason);
+					};
+				}
+				catch(exception) {
+					alert('Error' + exception);
+				}
+			}
+		</script>
+	</body>
 </html>
