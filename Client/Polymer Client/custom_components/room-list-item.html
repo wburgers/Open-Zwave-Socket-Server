@@ -1,0 +1,40 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+
+<polymer-element name="room-list-item">
+	<template>
+		<style>
+			:host {
+				background-color: white;
+				padding: 20px;
+				width: 225px;
+				margin-bottom: 20px;
+			}
+			.temp-names {
+				float: left;
+				margin: 10px;
+			}
+			.temp-values {
+				float: left;
+				margin: 10px;
+			}
+		</style>
+		<div class="room-list-item-header" layout horizontal center>
+			<h3>{{room.Name}}</h3>
+		</div>
+		<div class="temp-names">
+			<span block>current temperature</span>
+			<span block>current setpoint</span>
+		</div>
+		<div class="temp-values">
+			<span block>{{room.currentTemp}}</span>
+			<span block>{{room.currentSetpoint}}</span>
+		</div>
+	</template>
+	<script>
+		Polymer('room-list-item', {
+			publish: {
+				room: {},
+			},
+		});
+	</script>
+</polymer-element>

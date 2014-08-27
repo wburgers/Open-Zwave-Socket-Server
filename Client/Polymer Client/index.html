@@ -15,6 +15,7 @@
 		<link rel="import" href="bower_components/paper-input/paper-input.html">
 		
 		<link rel="import" href="custom_components/status-dot.html">
+		<link rel="import" href="custom_components/room-list.html">
 		
 		<style>
 			html,body {
@@ -26,8 +27,11 @@
 			core-header-panel {
 				height: 100%;
 			}
+			.menu-panel {
+				background: #E5E5E5;
+			}
 			core-toolbar {
-				background: #03a9f4;
+				background: #03A9F4;
 				color: black;
 			}
 			#navheader {
@@ -48,7 +52,7 @@
 	</head>
 	<body unresolved>
 		<core-drawer-panel  responsiveWidth="980px" id="drawerPanel">
-			<core-header-panel drawer>
+			<core-header-panel class="menu-panel" drawer>
 				<core-toolbar id="navheader'">
 					<span>Menu</span>
 				</core-toolbar>
@@ -68,7 +72,7 @@
 					<paper-icon-button icon="arrow-forward"></paper-icon-button>
 				</core-toolbar>
 				<div class="content">
-				
+				<room-list id="room-list"></room-list>
 				</div>
 			</core-header-panel>
 		</core-drawer-panel>
@@ -95,7 +99,10 @@
 				menu.addEventListener('core-select', function() {
 					alert(menu.selected);
 				});
-				
+
+				var room_list = document.getElementById('room-list');
+				room_list.Rooms = Rooms;
+
 				websocket_status = document.getElementById('websocket-status');
 				open_websocket();
 			});
@@ -107,7 +114,7 @@
 						websocket_status.color = 'green';
 						websocket_status.status = 'Connected';
 						//Init();
-						//GetDeviceList();
+						GetDeviceList();
 					};
 					websocket.onerror = function (error) {
 						websocket_status.color = 'red';
@@ -162,6 +169,9 @@
 							},
 							"ROOMLIST": function() {
 								var roomlistresponse = splitresponse[1].split("#");
+								while(Rooms.length > 0) {
+									Rooms.pop();
+								}
 								roomlistresponse.forEach( function(roomString) {
 									var splitRoomString = roomString.split("~");
 									var room = {
@@ -169,18 +179,9 @@
 										currentSetpoint: splitRoomString[2],
 										currentTemp: splitRoomString[3],
 									};
-									var exists = false;
-									Rooms.forEach( function(roomitem) {
-										if (roomitem.Name == room.Name) {
-											roomitem.currentSetpoint = room.currentSetpoint;
-											roomitem.currentTemp = room.currentTemp;
-											exists = true;
-										}
-									});
-									if(!exists) {
-										Rooms.push(room);
-									}
+									Rooms.push(room);
 								});
+								console.log(Rooms);
 							},
 							"ROOM": function() {
 								var roomresponse = splitresponse[1].split("~");
@@ -214,6 +215,10 @@
 				catch(exception) {
 					alert('Error' + exception);
 				}
+			};
+			function GetDeviceList() {
+				websocket.send("ALIST");
+				websocket.send("ROOMLIST");
 			}
 		</script>
 	</body>

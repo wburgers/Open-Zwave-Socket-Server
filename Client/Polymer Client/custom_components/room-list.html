@@ -1,0 +1,20 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="room-list-item.html">
+
+<polymer-element name="room-list" attributes="show">
+  <template>
+    <div layout horizontal wrap>
+      <template repeat="{{room in Rooms}}">
+        <room-list-item room={{room}}>
+	</room-list-item>
+      </template>
+    </div>
+  </template>
+  <script>
+    Polymer('room-list', {
+      publish: {
+      Rooms: [],
+      },
+    });
+  </script>
+</polymer-element>
