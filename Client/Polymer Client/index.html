@@ -68,8 +68,8 @@
 					<paper-icon-button id="navicon" icon="menu"></paper-icon-button>
 					<span flex>Polymer-Client</span>
 					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
-					<paper-input label="You can type commands here..."></paper-input>
-					<paper-icon-button icon="arrow-forward"></paper-icon-button>
+					<paper-input id="sendinput" label="You can type commands here..."></paper-input>
+					<paper-icon-button id="sendbutton" icon="arrow-forward"></paper-icon-button>
 				</core-toolbar>
 				<div class="content">
 				<room-list id="room-list"></room-list>
@@ -105,6 +105,13 @@
 
 				websocket_status = document.getElementById('websocket-status');
 				open_websocket();
+
+				var sendbutton = document.getElementById('sendbutton');
+				var sendinput = document.getElementById('sendinput');
+				sendbutton.addEventListener('tap', function() {
+					websocket.send(sendinput.inputValue);
+					sendinput.inputValue = "";
+				});
 			});
 			
 			function open_websocket() {
@@ -181,7 +188,6 @@
 									};
 									Rooms.push(room);
 								});
-								console.log(Rooms);
 							},
 							"ROOM": function() {
 								var roomresponse = splitresponse[1].split("~");
@@ -216,6 +222,8 @@
 					alert('Error' + exception);
 				}
 			};
+			function Init() {
+			}
 			function GetDeviceList() {
 				websocket.send("ALIST");
 				websocket.send("ROOMLIST");

@@ -17,5 +17,12 @@
     "paper-elements": "Polymer/paper-elements#~0.3.5",
     "polymer-elements": "PolymerLabs/polymer-elements#~0.3.0",
     "google-signin": "~0.0.8"
+  },
+  "resolutions": {
+    "polymer": "master",
+    "polymer-signals": "master",
+    "google-apis": "master",
+    "core-component-page": "master",
+    "platform": "master"
   }
 }
