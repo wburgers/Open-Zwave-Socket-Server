@@ -5,7 +5,7 @@
   <template>
     <div layout horizontal wrap>
       <template repeat="{{room in Rooms}}">
-        <room-list-item room={{room}} on-click="{{roomClick}}">
+        <room-list-item room={{room}} on-click="{{roomClick}}" hidden?="{{show != 0}}">
 	</room-list-item>
       </template>
     </div>

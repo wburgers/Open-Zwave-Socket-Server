@@ -96,12 +96,14 @@
 					drawerPanel.togglePanel();
 				});
 				var menu = document.querySelector('core-menu');
-				menu.addEventListener('core-select', function() {
-					alert(menu.selected);
-				});
-
 				var room_list = document.getElementById('room-list');
+				menu.addEventListener('core-select', function() {
+					room_list.show = menu.selected;
+				});
+				console.log(menu.selected);
+
 				room_list.Rooms = Rooms;
+				room_list.show = menu.selected;
 
 				websocket_status = document.getElementById('websocket-status');
 				open_websocket();
