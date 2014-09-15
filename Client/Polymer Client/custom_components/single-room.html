@@ -1,0 +1,22 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="./device-item.html">
+
+<polymer-element name="single-room" attributes="show">
+  <template>
+    <div>
+    </div>
+    <div layout horizontal wrap>
+      <template repeat="{{device in Devices}}">
+        <device-item device={{device}} hidden?="{{show != 10}}">
+	</device-item>
+      </template>
+    </div>
+  </template>
+  <script>
+    Polymer('room-list', {
+      publish: {
+        Devices: [],
+      },
+    });
+  </script>
+</polymer-element>

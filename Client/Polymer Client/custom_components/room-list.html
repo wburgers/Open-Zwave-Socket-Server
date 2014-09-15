@@ -14,11 +14,9 @@
     Polymer('room-list', {
       publish: {
         Rooms: [],
-        roomClick: function(event, detail, sender) {
-          console.log(event);
-          console.log(detail);
-          console.log(sender);
-        }
+      },
+      roomClick: function(event, detail, sender) {
+        this.fire('change-view',{view:10,room:sender});
       },
     });
   </script>
