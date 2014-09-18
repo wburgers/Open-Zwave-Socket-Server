@@ -16,6 +16,7 @@
 		
 		<link rel="import" href="custom_components/status-dot.html">
 		<link rel="import" href="custom_components/room-list.html">
+		<link rel="import" href="custom_components/single-room.html">
 		
 		<style>
 			html,body {
@@ -73,6 +74,7 @@
 				</core-toolbar>
 				<div class="content">
 				<room-list id="room-list"></room-list>
+				<single-room id="single-room"></single-room>
 				</div>
 			</core-header-panel>
 		</core-drawer-panel>
@@ -98,17 +100,18 @@
 
 				var menu = document.querySelector('core-menu');
 				var room_list = document.getElementById('room-list');
+				var single_room = document.getElementById('single-room');
 				websocket_status = document.getElementById('websocket-status');
 				var sendbutton = document.getElementById('sendbutton');
 				var sendinput = document.getElementById('sendinput');
 
 				menu.addEventListener('core-select', function() {
 					room_list.show = menu.selected;
+					single_room.show = menu.selected;
 				});
 
 				document.addEventListener('change-view', function(e) {
 					menu.selected = e.detail.view;
-					
 				});
 
 				sendbutton.addEventListener('tap', function() {
@@ -118,6 +121,10 @@
 
 				room_list.Rooms = Rooms;
 				room_list.show = menu.selected;
+
+				single_room.Devices = nodeInfo;
+				single_room.show = menu.selected;
+
 				open_websocket();
 			});
 			
@@ -148,6 +155,9 @@
 							},
 							"ALIST": function() {
 								var devices = splitresponse[1].split("#");
+								while(nodeInfo.length > 0) {
+									nodeInfo.pop();
+								}
 								devices.forEach( function(deviceString) {
 									var splitDeviceString = deviceString.split("~");
 									var splitValueString = splitDeviceString[6].split("<>");
@@ -164,21 +174,8 @@
 										LastSeen: splitDeviceString[5],
 										Values: values,
 									};
-									var exists = false;
 									
-									nodeInfo.forEach( function(node) {
-										if (node.ID == device.ID) {
-											node.Name = device.Name;
-											node.Location = device.Location;
-											node.Type = device.Type;
-											node.LastSeen = device.LastSeen;
-											node.Values = device.Values;
-											exists = true;
-										}
-									});
-									if(!exists) {	
-										nodeInfo.push(device);
-									}
+									nodeInfo.push(device);
 								});
 							},
 							"ROOMLIST": function() {

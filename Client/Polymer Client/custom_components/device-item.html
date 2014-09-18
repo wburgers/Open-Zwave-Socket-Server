@@ -1,0 +1,25 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+
+<polymer-element name="device-item">
+	<template>
+		<style>
+			:host {
+				background-color: white;
+				padding: 20px;
+				width: 225px;
+				margin: 10px;
+			}
+		</style>
+		<div layout horizontal center>
+			<h3>{{device.Name}}</h3>
+			<h3>{{device.Type}}</h3>
+		</div>
+	</template>
+	<script>
+		Polymer('device-item', {
+			publish: {
+				device: {},
+			},
+		});
+	</script>
+</polymer-element>

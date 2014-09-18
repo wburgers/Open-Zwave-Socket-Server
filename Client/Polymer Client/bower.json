@@ -22,6 +22,8 @@
   "resolutions": {
     "polymer": "master",
     "polymer-signals": "master",
-    "google-apis": "master"
+    "google-apis": "master",
+    "core-component-page": "master",
+    "platform": "master"
   }
 }
