@@ -130,7 +130,7 @@ struct libwebsocket_context *context;
 //-----------------------------------------------------------------------------
 // definitions
 //-----------------------------------------------------------------------------
-#define SOCKET_COLLECTION_TIMEOUT 15
+#define SOCKET_COLLECTION_TIMEOUT 10
 
 static bool stopping = false;
 static Socket* server;

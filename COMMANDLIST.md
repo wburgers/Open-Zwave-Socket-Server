@@ -115,7 +115,7 @@ The ALARMLIST command shows a list of the currently scheduled alarms and their t
 ### TEST
 The TEST command is purely for development.
 If you want to develop, it is easy to use this command and add some sample code to test a feature.
-In the master branch of the repository, it is always empty and the command will simple do nothing.
+In the master branch of the repository, it is always empty and the command will simply do nothing.
 
 ### EXIT
 The EXIT command closes all the socket connections (without warning) and stops the server.
