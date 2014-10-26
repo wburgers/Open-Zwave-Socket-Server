@@ -1,8 +1,14 @@
 <link rel="import" href="../bower_components/polymer/polymer.html">
 <link rel="import" href="./device-item.html">
+<script src="../bower_components/raphael/raphael.js"></script>
+<script src="../bower_components/justgage-bower/justgage.js"></script>
 
 <polymer-element name="single-room" attributes="show">
   <template>
+    <div id="temperature">
+      <div class="gauge" id="current-temp"></div>
+      <div class="gauge" id="setpoint-temp"></div>
+    </div>
     <div layout horizontal wrap>
       <template repeat="{{device in Devices}}">
         <device-item device={{device}} hidden?="{{show != 10 || device.Type != 'Multilevel Power Switch'}}">
@@ -12,9 +18,37 @@
   </template>
   <script>
     Polymer('single-room', {
+      currentTemp: {},
+      setpointTemp: {},
       publish: {
         Devices: [],
+	room: {},
       },
+      observe: {
+        'room.currentTemp': 'current',
+        'room.currentSetpoint': 'setpoint'
+      },
+      ready: function() {
+        console.log(this.$);
+        currentTemp = new JustGage({
+          id: "body /deep/ #current-temp",
+          value: 0,
+          min: 10,
+          max: 35,
+          title: "Current temperature"
+        });
+//        setpointTemp = new JustGage({
+//          id: "setpoint-temp",
+//          value: 0,
+//          min: 10,
+//          max: 35,
+//          title: "Setpoint temperature"
+//        });
+      },
+      current: function (oldValue,newValue) {
+        console.log("hoi");
+      },
+      setpoint: function (oldValue,newValue) {},
     });
   </script>
 </polymer-element>

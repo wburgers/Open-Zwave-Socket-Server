@@ -112,6 +112,7 @@
 
 				document.addEventListener('change-view', function(e) {
 					menu.selected = e.detail.view;
+					single_room.room = e.detail.room;
 				});
 
 				sendbutton.addEventListener('tap', function() {
