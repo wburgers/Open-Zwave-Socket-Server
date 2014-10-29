@@ -5,7 +5,14 @@
 
 <polymer-element name="single-room" attributes="show">
   <template>
-    <div id="temperature">
+	<style>
+		.gauge {
+			height: 240px;
+			width: 300px;
+			display: inline-block;
+		}
+	</style>
+    <div id="temperature" hidden?="{{show != 10}}">
       <div class="gauge" id="current-temp"></div>
       <div class="gauge" id="setpoint-temp"></div>
     </div>
@@ -22,33 +29,36 @@
       setpointTemp: {},
       publish: {
         Devices: [],
-	room: {},
+        room: {},
       },
       observe: {
         'room.currentTemp': 'current',
-        'room.currentSetpoint': 'setpoint'
+        'room.currentSetpoint': 'setpoint',
       },
       ready: function() {
-        console.log(this.$);
         currentTemp = new JustGage({
           id: "body /deep/ #current-temp",
-          value: 0,
-          min: 10,
-          max: 35,
-          title: "Current temperature"
+          value: 0.0,
+          min: 10.0,
+          max: 35.0,
+          title: "Current temperature",
+		  decimals: 1,
         });
-//        setpointTemp = new JustGage({
-//          id: "setpoint-temp",
-//          value: 0,
-//          min: 10,
-//          max: 35,
-//          title: "Setpoint temperature"
-//        });
+        setpointTemp = new JustGage({
+          id: "body /deep/ #setpoint-temp",
+          value: 0.0,
+          min: 10.0,
+          max: 35.0,
+          title: "Setpoint temperature",
+		  decimals: 1,
+        });
       },
       current: function (oldValue,newValue) {
-        console.log("hoi");
+		currentTemp.refresh(newValue);
       },
-      setpoint: function (oldValue,newValue) {},
+      setpoint: function (oldValue,newValue) {
+		setpointTemp.refresh(newValue);
+	  },
     });
   </script>
 </polymer-element>

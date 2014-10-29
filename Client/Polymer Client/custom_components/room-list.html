@@ -16,7 +16,7 @@
         Rooms: [],
       },
       roomClick: function(event, detail, sender) {
-        this.fire('change-view',{view:10,room:sender});
+        this.fire('change-view',{view:10,room:sender.room});
       },
     });
   </script>
