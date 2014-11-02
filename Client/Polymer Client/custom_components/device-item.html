@@ -1,4 +1,5 @@
 <link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/paper-slider/paper-slider.html">
 
 <polymer-element name="device-item">
 	<template>
@@ -11,14 +12,26 @@
 			}
 		</style>
 		<div layout horizontal center>
-			<h3>{{device.Name}}</h3>
-			<h3>{{device.Type}}</h3>
+			{{device.Name}}
 		</div>
+		<template if="{{device.Type == 'Multilevel Power Switch'}}">
+			<paper-slider
+				min="0"
+				max="99"
+				value="{{device.Values.Level}}"
+				editable
+				on-change="{{sliderChanged}}">
+			</paper-slider>
+		</template>
 	</template>
 	<script>
 		Polymer('device-item', {
 			publish: {
 				device: {},
+			},
+			sliderChanged: function(event, detail, sender) {
+				var commandstring = "SETNODE~"+this.device.ID+"~Level="+sender.value;
+				this.fire('send-command',{command:commandstring});
 			},
 		});
 	</script>

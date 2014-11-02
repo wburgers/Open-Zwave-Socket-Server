@@ -114,6 +114,10 @@
 					menu.selected = e.detail.view;
 					single_room.room = e.detail.room;
 				});
+				
+				document.addEventListener('send-command', function(e) {
+					websocket.send(e.detail.command);
+				});
 
 				sendbutton.addEventListener('tap', function() {
 					websocket.send(sendinput.inputValue);

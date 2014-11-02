@@ -11,6 +11,10 @@
 			width: 300px;
 			display: inline-block;
 		}
+		#temperature {
+			background-color: white;
+			margin: 10px;
+		}
 	</style>
     <div id="temperature" hidden?="{{show != 10}}">
       <div class="gauge" id="current-temp"></div>
@@ -18,7 +22,7 @@
     </div>
     <div layout horizontal wrap>
       <template repeat="{{device in Devices}}">
-        <device-item device={{device}} hidden?="{{show != 10 || device.Type != 'Multilevel Power Switch'}}">
+        <device-item device={{device}} hidden?="{{show != 10}}">
 	</cevice-item>
       </template>
     </div>
