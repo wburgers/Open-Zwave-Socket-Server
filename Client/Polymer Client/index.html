@@ -87,6 +87,7 @@
 			var websocket_status;
 			var nodeInfo = [];
 			var Rooms = [];
+			var single_room;
 			
 			document.addEventListener('polymer-ready', function() {
 				/*
@@ -100,7 +101,7 @@
 
 				var menu = document.querySelector('core-menu');
 				var room_list = document.getElementById('room-list');
-				var single_room = document.getElementById('single-room');
+				single_room = document.getElementById('single-room');
 				websocket_status = document.getElementById('websocket-status');
 				var sendbutton = document.getElementById('sendbutton');
 				var sendinput = document.getElementById('sendinput');
@@ -112,7 +113,8 @@
 
 				document.addEventListener('change-view', function(e) {
 					menu.selected = e.detail.view;
-					single_room.room = e.detail.room;
+					single_room.roomName = e.detail.roomName;
+					updateSingleRoom();
 				});
 				
 				document.addEventListener('send-command', function(e) {
@@ -197,11 +199,12 @@
 									};
 									Rooms.push(room);
 								});
+								updateSingleRoom();
 							},
 							"ROOM": function() {
 								var roomresponse = splitresponse[1].split("~");
 								Rooms.forEach( function(roomitem) {
-									if (roomitem.Name == roomresponse[0]) {
+									if (roomitem.Name === roomresponse[0]) {
 										roomitem.currentSetpoint = roomresponse[1];
 										roomitem.currentTemp = roomresponse[2];
 									}
@@ -236,6 +239,15 @@
 			function GetDeviceList() {
 				websocket.send("ALIST");
 				websocket.send("ROOMLIST");
+			}
+			function updateSingleRoom() {
+				if(typeof single_room.roomName != 'undefined' && single_room.roomName !== "") {
+					Rooms.forEach( function(roomItem) {
+						if (roomItem.Name === single_room.roomName) {
+							single_room.room = roomItem;
+						}
+					});
+				}
 			}
 		</script>
 	</body>

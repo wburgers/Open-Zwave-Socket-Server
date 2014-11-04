@@ -14,7 +14,7 @@
 		<div layout horizontal center>
 			{{device.Name}}
 		</div>
-		<template if="{{device.Type == 'Multilevel Power Switch'}}">
+		<template if="{{device.Type === 'Multilevel Power Switch'}}">
 			<paper-slider
 				min="0"
 				max="99"

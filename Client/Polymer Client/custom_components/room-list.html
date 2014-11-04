@@ -4,8 +4,8 @@
 <polymer-element name="room-list" attributes="show">
   <template>
     <div layout horizontal wrap>
-      <template repeat="{{room in Rooms}}">
-        <room-list-item room={{room}} on-click="{{roomClick}}" hidden?="{{show != 0}}">
+      <template repeat="{{room, r in Rooms}}">
+        <room-list-item room={{room}} on-click="{{roomClick}}" hidden?="{{show !== 0}}">
 	</room-list-item>
       </template>
     </div>
@@ -16,7 +16,8 @@
         Rooms: [],
       },
       roomClick: function(event, detail, sender) {
-        this.fire('change-view',{view:10,room:sender.room});
+	    var roomName = event.target.templateInstance.model.room.Name;
+        this.fire('change-view',{view:10,roomName:roomName});
       },
     });
   </script>

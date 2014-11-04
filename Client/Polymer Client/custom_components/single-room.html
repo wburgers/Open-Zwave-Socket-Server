@@ -4,65 +4,69 @@
 <script src="../bower_components/justgage-bower/justgage.js"></script>
 
 <polymer-element name="single-room" attributes="show">
-  <template>
-	<style>
-		.gauge {
-			height: 240px;
-			width: 300px;
-			display: inline-block;
-		}
-		#temperature {
-			background-color: white;
-			margin: 10px;
-		}
-	</style>
-    <div id="temperature" hidden?="{{show != 10}}">
-      <div class="gauge" id="current-temp"></div>
-      <div class="gauge" id="setpoint-temp"></div>
-    </div>
-    <div layout horizontal wrap>
-      <template repeat="{{device in Devices}}">
-        <device-item device={{device}} hidden?="{{show != 10}}">
-	</cevice-item>
-      </template>
-    </div>
-  </template>
-  <script>
-    Polymer('single-room', {
-      currentTemp: {},
-      setpointTemp: {},
-      publish: {
-        Devices: [],
-        room: {},
-      },
-      observe: {
-        'room.currentTemp': 'current',
-        'room.currentSetpoint': 'setpoint',
-      },
-      ready: function() {
-        currentTemp = new JustGage({
-          id: "body /deep/ #current-temp",
-          value: 0.0,
-          min: 10.0,
-          max: 35.0,
-          title: "Current temperature",
-		  decimals: 1,
-        });
-        setpointTemp = new JustGage({
-          id: "body /deep/ #setpoint-temp",
-          value: 0.0,
-          min: 10.0,
-          max: 35.0,
-          title: "Setpoint temperature",
-		  decimals: 1,
-        });
-      },
-      current: function (oldValue,newValue) {
-		currentTemp.refresh(newValue);
-      },
-      setpoint: function (oldValue,newValue) {
-		setpointTemp.refresh(newValue);
-	  },
-    });
-  </script>
+	<template>
+		<style>
+			.gauge {
+				height: 240px;
+				width: 300px;
+				display: inline-block;
+			}
+			#temperature {
+				background-color: white;
+				margin: 10px;
+			}
+		</style>
+		<div id="temperature" hidden?="{{show !== 10}}">
+			<div class="gauge" id="current-temp"></div>
+			<div class="gauge" id="setpoint-temp"></div>
+		</div>
+		<div layout horizontal wrap>
+			<template repeat="{{device in Devices}}">
+				<template if="{{device.Location === room.Name}}">
+					<device-item device={{device}} hidden?="{{show !== 10}}">
+					</device-item>
+				</template>
+			</template>
+		</div>
+	</template>
+	<script>
+		Polymer('single-room', {
+			currentTemp: {},
+			setpointTemp: {},
+			room: {},
+			publish: {
+				Devices: [],
+				room: {},
+				roomName: "",
+			},
+			observe: {
+				'room.currentTemp': 'current',
+				'room.currentSetpoint': 'setpoint',
+			},
+			ready: function() {
+				currentTemp = new JustGage({
+					id: "body /deep/ #current-temp",
+					value: 0.0,
+					min: 10.0,
+					max: 35.0,
+					title: "Current temperature",
+					decimals: 1,
+				});
+				setpointTemp = new JustGage({
+					id: "body /deep/ #setpoint-temp",
+					value: 0.0,
+					min: 10.0,
+					max: 35.0,
+					title: "Setpoint temperature",
+					decimals: 1,
+				});
+			},
+			current: function (oldValue,newValue) {
+				currentTemp.refresh(newValue);
+			},
+			setpoint: function (oldValue,newValue) {
+				setpointTemp.refresh(newValue);
+			},
+		});
+	</script>
 </polymer-element>
