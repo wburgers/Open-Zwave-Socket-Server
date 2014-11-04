@@ -10,9 +10,17 @@
 				width: 225px;
 				margin: 10px;
 			}
+			.names {
+				float: left;
+				margin: 10px;
+			}
+			.values {
+				float: left;
+				margin: 10px;
+			}
 		</style>
 		<div layout horizontal center>
-			{{device.Name}}
+			<h3>{{device.Name}}<h3>
 		</div>
 		<template if="{{device.Type === 'Multilevel Power Switch'}}">
 			<paper-slider
@@ -22,6 +30,14 @@
 				editable
 				on-change="{{sliderChanged}}">
 			</paper-slider>
+		</template>
+		<template if="{{device.Values['Battery Level']}}">
+			<div class="names">
+				<span block>Battery Level</span>
+			</div>
+			<div class="values">
+				<span block>{{device.Values["Battery Level"]}}</span>
+			</div>
 		</template>
 	</template>
 	<script>

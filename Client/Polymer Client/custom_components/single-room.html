@@ -23,7 +23,7 @@
 		<div layout horizontal wrap>
 			<template repeat="{{device in Devices}}">
 				<template if="{{device.Location === room.Name}}">
-					<device-item device={{device}} hidden?="{{show !== 10}}">
+					<device-item device={{device}} hidden?="{{show != 10}}">
 					</device-item>
 				</template>
 			</template>
