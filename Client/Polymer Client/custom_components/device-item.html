@@ -31,16 +31,18 @@
 				on-change="{{sliderChanged}}">
 			</paper-slider>
 		</template>
-		<template if="{{device.Values['Battery Level']}}">
-			<div class="names">
+		<div class="names">
+			<template if="{{device.Values['Battery Level']}}">
 				<span block>Battery Level</span>
 				<span block>Last Seen</span>
-			</div>
-			<div class="values">
+			</template>
+		</div>
+		<div class="values">
+		<template if="{{device.Values['Battery Level']}}">
 				<span block>{{device.Values["Battery Level"]}}</span>
 				<span block>{{device.LastSeen}}</span>
-			</div>
-		</template>
+			</template>
+		</div>
 	</template>
 	<script>
 		Polymer('device-item', {

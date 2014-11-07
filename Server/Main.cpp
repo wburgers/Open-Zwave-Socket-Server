@@ -1195,7 +1195,7 @@ void *run_socket(void* arg) {
 				return 0;
 			}
 			
-			thread_sock << process_commands(data);
+			thread_sock << process_commands(data) + "\n";
 		}
 		catch (ProtocolException& e) {
 			string what = "ProtocolException: ";
@@ -1268,7 +1268,7 @@ std::string process_commands(std::string data) {
 					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeLastSeen.str() + "~" + ssNodeValue.str() + "#";
 				}
 			}
-			device = device.substr(0, device.size() - 1) + "\n";
+			device = device.substr(0, device.size() - 1);
 			std::cout << "Sent Device List \n";
 			output += device;
 			break;
@@ -1310,7 +1310,7 @@ std::string process_commands(std::string data) {
 			
 			stringstream ssNode;
 			ssNode << Node;
-			output += "MSG~ZWave Name set Node=" + ssNode.str() + "\n";
+			output += "MSG~ZWave Name set Node=" + ssNode.str();
 			
 			break;
 		}
@@ -1325,7 +1325,7 @@ std::string process_commands(std::string data) {
 				currentTemp << rit->currentTemp;
 				room += "ROOM~"+rit->name+"~"+setpoint.str()+"~"+currentTemp.str()+"#";
 			}
-			room = room.substr(0, room.size() - 1) + "\n";
+			room = room.substr(0, room.size() - 1);
 			output += room;
 			break;
 		}
@@ -1357,7 +1357,7 @@ std::string process_commands(std::string data) {
 				stringstream setpoint, currentTemp;
 				setpoint << rit->setpoint;
 				currentTemp << rit->currentTemp;
-				output += location + "~" + setpoint.str() +"~"+currentTemp.str() + "\n";
+				output += location + "~" + setpoint.str() +"~"+currentTemp.str();
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
 			
@@ -1396,7 +1396,7 @@ std::string process_commands(std::string data) {
 						stringstream ssID;
 						ssID << scid;
 						Manager::Get()->SetSceneLabel(scid, sclabel);
-						output += "Scene created with name " + sclabel +" and scene_id " + ssID.str() + "\n";
+						output += "Scene created with name " + sclabel +" and scene_id " + ssID.str();
 					}
 					Manager::Get()->WriteConfig(g_homeId);
 					break;
@@ -1413,9 +1413,9 @@ std::string process_commands(std::string data) {
 						throw ProtocolException(3, "No scenes created");
 					}
 					
-					stringstream ssNum;
-					ssNum << numscenes;
-					output += "numscenes " + ssNum.str() + "\n";
+					//stringstream ssNum;
+					//ssNum << numscenes;
+					//output += "numscenes " + ssNum.str();
 					
 					string sclabel = trim(v[2]);
 					int scid=0;
@@ -1428,7 +1428,7 @@ std::string process_commands(std::string data) {
 						if(sclabel != Manager::Get()->GetSceneLabel(scid)) {
 							continue;
 						}
-						output += "Found right scene\n";
+						//output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
 						uint8 cmdclass = 0;
 						if(nodeInfo->m_basicmapping > 0 || try_map_basic(g_homeId, Node)) {
@@ -1484,14 +1484,16 @@ std::string process_commands(std::string data) {
 										break;
 									}
 									default:
-										output += "unknown ValueType";
+										//output += "unknown ValueType";
 										break;
 								}
 								
-								if(!response)
-									output+= "Something went wrong\n";
-								else
-									output += "Add valueid/value to scene\n";
+								if(!response) {
+									//output+= "Something went wrong\n";
+									//todo: create a better error message
+								} else {
+									output += "Added valueid/value to scene " + sclabel;
+								}
 							}
 						}
 					}
@@ -1510,9 +1512,9 @@ std::string process_commands(std::string data) {
 						throw ProtocolException(3, "No scenes created");
 					}
 					
-					stringstream ssNum;
-					ssNum << numscenes;
-					output += "numscenes " + ssNum.str() + "\n";
+					//stringstream ssNum;
+					//ssNum << numscenes;
+					//output += "numscenes " + ssNum.str() + "\n";
 					
 					string sclabel = trim(v[2]);
 					int scid=0;
@@ -1524,7 +1526,7 @@ std::string process_commands(std::string data) {
 						if(sclabel != Manager::Get()->GetSceneLabel(scid)){
 							continue;
 						}
-						output += "Found right scene\n";
+						//output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
 						uint8 cmdclass = 0;
 						if(nodeInfo->m_basicmapping > 0 || try_map_basic(g_homeId, Node)) {
@@ -1543,7 +1545,7 @@ std::string process_commands(std::string data) {
 										continue;
 									}
 								}
-								output += "Remove valueid from scene\n";
+								output += "Remove valueid from scene" + sclabel;
 								Manager::Get()->RemoveSceneValue(scid, (*vit));
 							}
 						}
@@ -1650,7 +1652,7 @@ std::string process_commands(std::string data) {
 							else {
 								stringstream ssNodeId;
 								ssNodeId << (*it)->m_nodeId;
-								output += "Could not get the day out of node " + ssNodeId.str() + "\n";
+								output += "Could not get the day out of node " + ssNodeId.str();
 							}
 							break;
 						}
@@ -1664,7 +1666,7 @@ std::string process_commands(std::string data) {
 							else {
 								stringstream ssNodeId;
 								ssNodeId << (*it)->m_nodeId;
-								output += "Could not get the hour out of node " + ssNodeId.str() + "\n";
+								output += "Could not get the hour out of node " + ssNodeId.str();
 							}
 							break;
 						}
@@ -1678,12 +1680,13 @@ std::string process_commands(std::string data) {
 							else {
 								stringstream ssNodeId;
 								ssNodeId << (*it)->m_nodeId;
-								output += "Could not get the minute out of node " + ssNodeId.str() + "\n";
+								output += "Could not get the minute out of node " + ssNodeId.str();
 							}
 							break;
 						}
-						default:
-							output += "could find the current time of node\n";
+						default:;
+							//output += "could find the current time of node ";
+							//todo create a nice error message here...
 					}
 				}
 				//cout << (*it)->m_needsSync << endl;
@@ -1908,7 +1911,7 @@ bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, s
 	}
 	else {
 		//WriteLog( LogLevel_Debug, false, "Return=false (node doesn't exist)" );
-		err_message += "node doesn't exist";
+		err_message += "node doesn't exist\n";
 		response = false;
 	}
 
@@ -1937,7 +1940,7 @@ std::string activateScene(std::string sclabel) {
 			continue;
 		}
 		Manager::Get()->ActivateScene(scid);
-		return "Activate scene "+sclabel+"\n";
+		return "Activate scene "+sclabel;
 	}
 	throw ProtocolException(4, "Scene not found");
 }
