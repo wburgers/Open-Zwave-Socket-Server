@@ -1,4 +1,6 @@
 <link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/core-icons/core-icons.html">
+<link rel="import" href="../bower_components/paper-fab/paper-fab.html">
 <link rel="import" href="./device-item.html">
 <script src="../bower_components/raphael/raphael.js"></script>
 <script src="../bower_components/justgage-bower/justgage.js"></script>
@@ -6,19 +8,41 @@
 <polymer-element name="single-room" attributes="show">
 	<template>
 		<style>
-			.gauge {
-				height: 240px;
-				width: 300px;
-				display: inline-block;
-			}
 			#temperature {
 				background-color: white;
 				margin: 10px;
 			}
+			#temperature-inner {
+				width: 760px;
+				margin: auto;
+			}
+			.gauge {
+				height: 240px;
+				width: 300px;
+				display: inline-block;
+				overflow:hidden;
+				vertical-align:top;
+				margin: auto;
+			}
+			.temp-buttons {
+				vertical-align:top;
+				display: inline-block;
+				margin: auto;
+			}
+			.temp-button {
+				display: block;
+				margin: 43px;
+			}
 		</style>
 		<div id="temperature" hidden?="{{show !== 10}}">
-			<div class="gauge" id="current-temp"></div>
-			<div class="gauge" id="setpoint-temp"></div>
+			<div id="temperature-inner">
+				<div class="gauge" id="current-temp"></div>
+				<div class="gauge" id="setpoint-temp"></div>
+				<div class="temp-buttons">
+					<paper-fab class="temp-button" id="PLUS" icon="add" on-tap="{{buttonTap}}"></paper-fab>
+					<paper-fab class="temp-button" id="MINUS" icon="remove" on-tap="{{buttonTap}}" style="background: #5677fc;"></paper-fab>
+				</div>
+			</div>
 		</div>
 		<div layout horizontal wrap>
 			<template repeat="{{device in Devices}}">
@@ -66,6 +90,10 @@
 			},
 			setpoint: function (oldValue,newValue) {
 				setpointTemp.refresh(newValue);
+			},
+			buttonTap: function(event, detail, sender) {
+				var commandstring = "ROOM~"+sender.id+"~"+this.roomName;
+				this.fire('send-command',{command:commandstring});
 			},
 		});
 	</script>

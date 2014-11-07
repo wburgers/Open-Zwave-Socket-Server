@@ -1254,7 +1254,16 @@ std::string process_commands(std::string data) {
 					ssNodeId << nodeID;
 					ssNodeType << nodeType;
 					ssNodeZone << nodeZone;
-					ssNodeLastSeen << trim(ctime(&(nodeInfo->m_LastSeen)));
+					char buffer[256];
+					struct tm * timeinfo;
+					timeinfo = localtime(&(nodeInfo->m_LastSeen));
+					if(strftime(buffer, 256, "%a %d %b %R", timeinfo) != 0)
+					{
+						ssNodeLastSeen << buffer;
+					}
+					else {
+						ssNodeLastSeen << trim(ctime(&(nodeInfo->m_LastSeen)));
+					}
 					ssNodeValue << nodeValue;
 					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeLastSeen.str() + "~" + ssNodeValue.str() + "#";
 				}
@@ -1357,10 +1366,15 @@ std::string process_commands(std::string data) {
 			time_t now = time(NULL);
 			thermostatAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
 			
+			Alarm updateAlarm;
+			updateAlarm.description = "Update";
+			updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT+1;
+			
 			while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
 				{alarmList.pop_front();}
 			
 			alarmList.push_back(thermostatAlarm);
+			alarmList.push_back(updateAlarm);
 			alarmList.sort();
 			alarmList.unique();
 			

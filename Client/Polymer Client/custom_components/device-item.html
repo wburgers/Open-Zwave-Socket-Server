@@ -7,7 +7,7 @@
 			:host {
 				background-color: white;
 				padding: 20px;
-				width: 225px;
+				width: 250px;
 				margin: 10px;
 			}
 			.names {
@@ -20,7 +20,7 @@
 			}
 		</style>
 		<div layout horizontal center>
-			<h3>{{device.Name}}<h3>
+			<h4>{{device.Name}}</h4>
 		</div>
 		<template if="{{device.Type === 'Multilevel Power Switch'}}">
 			<paper-slider
@@ -34,9 +34,11 @@
 		<template if="{{device.Values['Battery Level']}}">
 			<div class="names">
 				<span block>Battery Level</span>
+				<span block>Last Seen</span>
 			</div>
 			<div class="values">
 				<span block>{{device.Values["Battery Level"]}}</span>
+				<span block>{{device.LastSeen}}</span>
 			</div>
 		</template>
 	</template>
