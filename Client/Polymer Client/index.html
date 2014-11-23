@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<script src="bower_components/platform/platform.js"></script>
+		<script src="bower_components/webcomponentsjs/webcomponents.js"></script>
 		<script src="settings.js"></script>
 		<link rel="import" href="bower_components/core-toolbar/core-toolbar.html">
 		<link rel="import" href="bower_components/core-menu/core-menu.html">
@@ -52,7 +52,7 @@
 		</style>
 	</head>
 	<body fullbleed unresolved>
-		<core-drawer-panel  responsiveWidth="980px" id="drawerPanel">
+		<core-drawer-panel  responsiveWidth="980px" drawerWidth="200px" id="drawerPanel">
 			<core-header-panel class="menu-panel" drawer>
 				<core-toolbar id="navheader'">
 					<span>Menu</span>
@@ -70,7 +70,9 @@
 					<span flex>Polymer-Client</span>
 					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
 					<paper-input id="sendinput" label="You can type commands here..."></paper-input>
-					<paper-icon-button id="sendbutton" icon="arrow-forward"></paper-icon-button>
+					<paper-button raised id="sendbutton">
+						<core-icon icon="arrow-forward"></core-icon>
+					</paper-button>
 				</core-toolbar>
 				<div class="content">
 				<room-list id="room-list"></room-list>
@@ -87,6 +89,7 @@
 			var websocket_status;
 			var nodeInfo = [];
 			var Rooms = [];
+			var Scenes = [];
 			var single_room;
 			
 			document.addEventListener('polymer-ready', function() {
@@ -122,8 +125,11 @@
 				});
 
 				sendbutton.addEventListener('tap', function() {
-					websocket.send(sendinput.inputValue);
-					sendinput.inputValue = "";
+					sendInput();
+				});
+				
+				sendinput.addEventListener('change', function() {
+					sendInput();
 				});
 
 				room_list.Rooms = Rooms;
@@ -133,6 +139,11 @@
 				single_room.show = menu.selected;
 
 				open_websocket();
+				
+				function sendInput() {
+					websocket.send(sendinput.committedValue);
+					sendinput.value = "";
+				};
 			});
 			
 			function open_websocket() {
@@ -146,7 +157,7 @@
 					};
 					websocket.onerror = function (error) {
 						websocket_status.color = 'red';
-						websocket_status.status = 'Error<br>Check console';
+						websocket_status.status = 'Error Check console';
 						console.log("error: " + error.data);
 					};
 					websocket.onmessage = function (message) {
@@ -156,8 +167,7 @@
 						//console.log(command);
 						var commandSwitch = {
 							"UPDATE": function() {
-								websocket.send('ALIST');
-								websocket.send('ROOMLIST');
+								GetDeviceList();
 								//sleep(25, Refresh);
 							},
 							"ALIST": function() {
@@ -210,6 +220,10 @@
 									}
 								});
 							},
+							"SCENELIST": function() {
+								var scenelistresponse = splitresponse[1].split("#");
+								
+							},
 							"SWITCH": function() {
 							},
 							"default": function() {
@@ -225,7 +239,7 @@
 					};
 					websocket.onclose = function (event) {
 						websocket_status.color = 'red';
-						websocket_status.status = 'Closed<br>Check console';
+						websocket_status.status = 'Closed, Check console';
 						console.log("Closed with code: " + event.code + " " + event.reason);
 					};
 				}
@@ -238,6 +252,7 @@
 			function GetDeviceList() {
 				websocket.send("ALIST");
 				websocket.send("ROOMLIST");
+				websocket.send("SCENELIST");
 			}
 			function updateSingleRoom() {
 				if(typeof single_room.roomName != 'undefined' && single_room.roomName !== "") {

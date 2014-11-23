@@ -6,7 +6,7 @@ This command has no parameters
 ### SETNODE
 With the SETNODE command, you can change specific values of a device.
 The following things can be set with a SETNODE command:
-	Name, Location, Level, Thermostat\_Setpoint, Polling, Wake\_up\_Interval and Battery_report
+	Name, Location, Level, Thermostat Setpoint, Polling, Wake-up Interval and Battery report
 
 For example, to set the name of node 2 to "living room lamp 1"
 ```
@@ -26,7 +26,7 @@ It returns the list of rooms including current temperature and current setpoint 
 
 ### ROOM
 With a ROOM command the temperature for a room can be set to a certain level.
-The websocket client gives a nice example of the workings of this command.
+The Polymer client gives a nice example of the workings of this command.
 You already have a current setpoint for a room if you use radiator thermostats.
 By giving the
 ```

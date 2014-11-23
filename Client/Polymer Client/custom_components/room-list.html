@@ -2,23 +2,25 @@
 <link rel="import" href="./room-list-item.html">
 
 <polymer-element name="room-list" attributes="show">
-  <template>
-    <div layout horizontal wrap>
-      <template repeat="{{room in Rooms}}">
-        <room-list-item room={{room}} on-click="{{roomClick}}" hidden?="{{show != 0}}">
-	</room-list-item>
-      </template>
-    </div>
-  </template>
-  <script>
-    Polymer('room-list', {
-      publish: {
-        Rooms: [],
-      },
-      roomClick: function(event, detail, sender) {
-	    var roomName = event.target.templateInstance.model.room.Name;
-        this.fire('change-view',{view:10,roomName:roomName});
-      },
-    });
-  </script>
+	<template>
+		<template if="{{show == 0}}">
+			<div layout horizontal wrap>
+				<template repeat="{{room in Rooms}}">
+					<room-list-item room={{room}} on-click="{{roomClick}}">
+					</room-list-item>
+				</template>
+			</div>
+		</template>
+	</template>
+	<script>
+		Polymer('room-list', {
+			publish: {
+				Rooms: [],
+			},
+			roomClick: function(event, detail, sender) {
+				var roomName = event.target.templateInstance.model.room.Name;
+				this.fire('change-view',{view:10,roomName:roomName});
+			},
+		});
+	</script>
 </polymer-element>

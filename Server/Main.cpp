@@ -110,6 +110,14 @@ struct Room {
 };
 
 //-----------------------------------------------------------------------------
+// Scenes in this Open-Zwave server have a name and only one is running
+//-----------------------------------------------------------------------------
+struct SceneListItem {
+	std::string		name;
+	bool			active;
+};
+
+//-----------------------------------------------------------------------------
 // LibWebSockets messages definitions
 //-----------------------------------------------------------------------------
 #define MAX_MESSAGE_QUEUE 32
@@ -142,13 +150,14 @@ static bool atHome = false;
 static bool alarmset = false;
 static list<Alarm> alarmList;
 static list<Room> roomList;
+static list<SceneListItem> sceneList;
 static list<NodeInfo*> g_nodes;
 static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
+enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
@@ -163,6 +172,7 @@ void create_string_maps() {
 	s_mapStringCommands["ROOM"] = RoomC;
 	s_mapStringCommands["PLUS"] = Plus;
 	s_mapStringCommands["MINUS"] = Minus;
+	s_mapStringCommands["SCENELIST"] = SceneListC;
 	s_mapStringCommands["SCENE"] = SceneC;
 	s_mapStringCommands["CREATE"] = Create;
 	s_mapStringCommands["ADD"] = Add;
@@ -219,6 +229,7 @@ void create_string_maps() {
 
 //functions
 bool init_Rooms();
+bool init_Scenes();
 void *websockets_main(void* arg);
 void *run_socket(void* arg);
 std::string process_commands(std::string data);
@@ -993,6 +1004,10 @@ int main(int argc, char* argv[]) {
 			std::cerr << "Something went wrong configuring the Rooms";
 			return 0;
 		}
+		if(!init_Scenes()) {
+			std::cerr << "Something went wrong configuring the Scenes";
+			return 0;
+		}
 		Manager::Get()->WriteConfig(g_homeId);
 
 		Driver::DriverData data;
@@ -1126,6 +1141,31 @@ bool init_Rooms() {
 		}
 	}
 	
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// init_Rooms
+// Create a list of rooms for the program to maintain
+// The roomlist is built from the devicelist information
+//-----------------------------------------------------------------------------
+bool init_Scenes() {
+	uint8 numscenes = 0;
+	uint8 *sceneIds = new uint8[numscenes];
+	
+	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+		return false;
+	}
+	
+	int scid=0;
+	
+	for(int i=0; i<numscenes; ++i) {
+		scid = sceneIds[i];
+		SceneListItem newScene;
+		newScene.name = Manager::Get()->GetSceneLabel(scid);
+		newScene.active = false;
+		sceneList.push_back(newScene);
+	}
 	return true;
 }
 
@@ -1380,6 +1420,21 @@ std::string process_commands(std::string data) {
 			
 			signal(SIGALRM, sigalrm_handler);
 			alarm(alarmList.front().alarmtime - now);
+			break;
+		}
+		case SceneListC:
+		{
+			std::string sceneString;
+			std::string active = "false";
+			for(list<SceneListItem>::iterator sliit=sceneList.begin(); sliit!=sceneList.end(); ++sliit) {
+				sceneString += "SCENE~"+sliit->name+"~";
+				if(sliit->active) {
+					sceneString += "LastActive";
+				}
+				sceneString += "#";
+			}
+			sceneString = sceneString.substr(0, sceneString.size() - 1);
+			output += sceneString;
 			break;
 		}
 		case SceneC:

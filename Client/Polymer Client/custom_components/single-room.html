@@ -34,7 +34,7 @@
 				margin: 43px;
 			}
 		</style>
-		<div id="temperature" hidden?="{{show !== 10}}">
+		<div id="temperature" hidden?="{{show != 10}}">
 			<div id="temperature-inner">
 				<div class="gauge" id="current-temp"></div>
 				<div class="gauge" id="setpoint-temp"></div>
@@ -45,9 +45,9 @@
 			</div>
 		</div>
 		<div layout horizontal wrap>
-			<template repeat="{{device in Devices}}">
+			<template repeat="{{device in Devices}}" if="{{show == 10}}">
 				<template if="{{device.Location === room.Name}}">
-					<device-item device={{device}} hidden?="{{show != 10}}">
+					<device-item device={{device}}>
 					</device-item>
 				</template>
 			</template>
