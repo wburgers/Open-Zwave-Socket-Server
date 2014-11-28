@@ -1425,7 +1425,6 @@ std::string process_commands(std::string data) {
 		case SceneListC:
 		{
 			std::string sceneString;
-			std::string active = "false";
 			for(list<SceneListItem>::iterator sliit=sceneList.begin(); sliit!=sceneList.end(); ++sliit) {
 				sceneString += "SCENE~"+sliit->name+"~";
 				if(sliit->active) {

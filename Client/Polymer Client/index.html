@@ -17,6 +17,7 @@
 		<link rel="import" href="custom_components/status-dot.html">
 		<link rel="import" href="custom_components/room-list.html">
 		<link rel="import" href="custom_components/single-room.html">
+		<link rel="import" href="custom_components/scene-list.html">
 		
 		<style>
 			html,body {
@@ -69,14 +70,15 @@
 					<paper-icon-button id="navicon" icon="menu"></paper-icon-button>
 					<span flex>Polymer-Client</span>
 					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
-					<paper-input id="sendinput" label="You can type commands here..."></paper-input>
+					<paper-input id="sendinput" label="Type commands here..."></paper-input>
 					<paper-button raised id="sendbutton">
 						<core-icon icon="arrow-forward"></core-icon>
 					</paper-button>
 				</core-toolbar>
 				<div class="content">
-				<room-list id="room-list"></room-list>
-				<single-room id="single-room"></single-room>
+					<room-list id="room-list"></room-list>
+					<single-room id="single-room"></single-room>
+					<scene-list id="scene-list"></scene-list>
 				</div>
 			</core-header-panel>
 		</core-drawer-panel>
@@ -105,6 +107,7 @@
 				var menu = document.querySelector('core-menu');
 				var room_list = document.getElementById('room-list');
 				single_room = document.getElementById('single-room');
+				var scene_list = document.getElementById('scene-list');
 				websocket_status = document.getElementById('websocket-status');
 				var sendbutton = document.getElementById('sendbutton');
 				var sendinput = document.getElementById('sendinput');
@@ -112,6 +115,7 @@
 				menu.addEventListener('core-select', function() {
 					room_list.show = menu.selected;
 					single_room.show = menu.selected;
+					scene_list.show = menu.selected;
 				});
 
 				document.addEventListener('change-view', function(e) {
@@ -137,6 +141,9 @@
 
 				single_room.Devices = nodeInfo;
 				single_room.show = menu.selected;
+				
+				scene_list.Scenes = Scenes;
+				scene_list.show = menu.selected;
 
 				open_websocket();
 				
@@ -222,7 +229,17 @@
 							},
 							"SCENELIST": function() {
 								var scenelistresponse = splitresponse[1].split("#");
-								
+								while(Scenes.length > 0) {
+									Scenes.pop();
+								}
+								scenelistresponse.forEach( function(sceneString) {
+									var splitSceneString = sceneString.split("~");
+									var scene = {
+										Name: splitSceneString[1],
+										Active: splitSceneString[2],
+									};
+									Scenes.push(scene);
+								});
 							},
 							"SWITCH": function() {
 							},
