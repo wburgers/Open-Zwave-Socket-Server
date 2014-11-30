@@ -1,0 +1,37 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/core-icons/av-icons.html">
+<link rel="import" href="../bower_components/paper-fab/paper-fab.html">
+
+<polymer-element name="scene-list-item">
+	<template>
+		<style>
+			:host {
+				background-color: white;
+				padding: 20px;
+				width: 265px;
+				margin: 10px;
+				position: relative;
+			}
+			.activate-button {
+				position: absolute;
+				top: 10px;
+				right: 10px;
+			}
+		</style>
+		<div class="scene-list-item-header" layout horizontal center>
+			<h3>{{scene.Name}}</h3>
+		</div>
+		<paper-fab mini class="activate-button" id="{{scene.Name}}" icon="av:play-arrow" on-tap="{{buttonTap}}"></paper-fab>
+	</template>
+	<script>
+		Polymer('scene-list-item', {
+			publish: {
+				scene: {},
+			},
+			buttonTap: function(event, detail, sender) {
+				var commandstring = "SCENE~ACTIVATE~"+sender.id;
+				this.fire('send-command',{command:commandstring});
+			},
+		});
+	</script>
+</polymer-element>

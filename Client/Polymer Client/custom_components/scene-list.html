@@ -1,11 +1,13 @@
 <link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="./scene-list-item.html">
 
 <polymer-element name="scene-list" attributes="show">
 	<template>
 		<template if="{{show == 1}}">
 			<div layout horizontal wrap>
 				<template repeat="{{scene in Scenes}}">
-					{{scene.Name}}
+					<scene-list-item scene={{scene}}>
+					</scene-list-item>
 				</template>
 			</div>
 		</template>
