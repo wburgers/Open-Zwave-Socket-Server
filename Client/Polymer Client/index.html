@@ -45,11 +45,6 @@
 			.content {
 				padding: 20px;
 			}
-			/* drawer is always visible on a wide screen
-			so menu button isn't required */
-			core-drawer-panel:not([narrow]) #navicon {
-				display: none;
-			}
 		</style>
 	</head>
 	<body fullbleed unresolved>
@@ -67,7 +62,7 @@
 			
 			<core-header-panel main>
 				<core-toolbar id="mainheader">
-					<paper-icon-button id="navicon" icon="menu"></paper-icon-button>
+					<paper-icon-button core-drawer-toggle icon="menu"></paper-icon-button>
 					<span flex>Polymer-Client</span>
 					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
 					<paper-input id="sendinput" label="Type commands here..."></paper-input>
@@ -95,15 +90,6 @@
 			var single_room;
 			
 			document.addEventListener('polymer-ready', function() {
-				/*
-				register buttonsclicks to actions
-				*/
-				var navicon = document.getElementById('navicon');
-				var drawerPanel = document.getElementById('drawerPanel');
-				navicon.addEventListener('click', function() {
-					drawerPanel.togglePanel();
-				});
-
 				var menu = document.querySelector('core-menu');
 				var room_list = document.getElementById('room-list');
 				single_room = document.getElementById('single-room');
