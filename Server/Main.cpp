@@ -157,7 +157,7 @@ static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, PollInterval, AlarmList, Test, Exit};
+enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, AtHome, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
@@ -182,6 +182,7 @@ void create_string_maps() {
 	s_mapStringCommands["CANCEL"] = Cancel;
 	s_mapStringCommands["CRON"] = Cron;
 	s_mapStringCommands["SWITCH"] = Switch;
+	s_mapStringCommands["ATHOME"] = AtHome;
 	s_mapStringCommands["POLLINTERVAL"] = PollInterval;
 	s_mapStringCommands["ALARMLIST"] = AlarmList;
 	s_mapStringCommands["TEST"] = Test;
@@ -1750,6 +1751,16 @@ std::string process_commands(std::string data) {
 		case Switch:
 		{
 			output += switchAtHome();
+			break;
+		}
+		case AtHome:
+		{
+			if(atHome) {
+				output += "true";
+			}
+			else {
+				output += "false";
+			}
 			break;
 		}
 		case PollInterval:

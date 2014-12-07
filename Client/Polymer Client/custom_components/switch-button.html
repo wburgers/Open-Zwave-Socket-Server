@@ -1,0 +1,39 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+
+<polymer-element name="switch-button">
+	<template>
+		<style>
+			#switchbutton {
+				color: {{color}};
+			}
+		</style>
+		<paper-icon-button icon="settings-power" id="switchbutton"></paper-icon-button>
+	</template>
+	<script>
+		Polymer('switch-button', {
+			publish: {
+				atHome: false,
+				colorChange: function () {
+					if(this.atHome == "true") {
+						this.color = "red";
+					}
+					else {
+						this.color = "green";
+					}
+				},
+			},
+			color: "grey",
+			observe: {
+				'atHome': 'switchAtHome',
+			},
+			switchAtHome: function (oldValue,newValue) {
+				if(newValue == "true") {
+					this.color = "green";
+				}
+				else {
+					this.color = "red";
+				}
+			},
+		});
+	</script>
+</polymer-element>

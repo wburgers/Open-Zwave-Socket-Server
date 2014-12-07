@@ -18,6 +18,7 @@
 		<link rel="import" href="custom_components/room-list.html">
 		<link rel="import" href="custom_components/single-room.html">
 		<link rel="import" href="custom_components/scene-list.html">
+		<link rel="import" href="custom_components/switch-button.html">
 		
 		<style>
 			html,body {
@@ -66,9 +67,7 @@
 					<span flex>Polymer-Client</span>
 					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
 					<paper-input id="sendinput" label="Type commands here..."></paper-input>
-					<paper-button raised id="sendbutton">
-						<core-icon icon="arrow-forward"></core-icon>
-					</paper-button>
+					<switch-button id="switchbutton"></switch-button>
 				</core-toolbar>
 				<div class="content">
 					<room-list id="room-list"></room-list>
@@ -84,6 +83,7 @@
 			window.WebSocket = window.WebSocket || window.MozWebSocket;
 			var websocket;
 			var websocket_status;
+			var switchbutton;
 			var nodeInfo = [];
 			var Rooms = [];
 			var Scenes = [];
@@ -95,8 +95,8 @@
 				single_room = document.getElementById('single-room');
 				var scene_list = document.getElementById('scene-list');
 				websocket_status = document.getElementById('websocket-status');
-				var sendbutton = document.getElementById('sendbutton');
 				var sendinput = document.getElementById('sendinput');
+				switchbutton = document.getElementById('switchbutton');
 
 				menu.addEventListener('core-select', function() {
 					room_list.show = menu.selected;
@@ -113,13 +113,15 @@
 				document.addEventListener('send-command', function(e) {
 					websocket.send(e.detail.command);
 				});
-
-				sendbutton.addEventListener('tap', function() {
-					sendInput();
-				});
 				
 				sendinput.addEventListener('change', function() {
-					sendInput();
+					websocket.send(sendinput.committedValue);
+					sendinput.value = "";
+				});
+				
+				switchbutton.addEventListener('tap', function() {
+					switchbutton.colorChange();
+					websocket.send("SWITCH");
 				});
 
 				room_list.Rooms = Rooms;
@@ -132,11 +134,6 @@
 				scene_list.show = menu.selected;
 
 				open_websocket();
-				
-				function sendInput() {
-					websocket.send(sendinput.committedValue);
-					sendinput.value = "";
-				};
 			});
 			
 			function open_websocket() {
@@ -229,8 +226,11 @@
 							},
 							"SWITCH": function() {
 							},
+							"ATHOME": function() {
+								switchbutton.atHome = splitresponse[1];
+							},
 							"default": function() {
-							}
+							},
 						};
 						
 						if ( commandSwitch[command] ) {
@@ -256,6 +256,7 @@
 				websocket.send("ALIST");
 				websocket.send("ROOMLIST");
 				websocket.send("SCENELIST");
+				websocket.send("ATHOME");
 			}
 			function updateSingleRoom() {
 				if(typeof single_room.roomName != 'undefined' && single_room.roomName !== "") {
