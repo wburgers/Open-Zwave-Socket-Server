@@ -372,7 +372,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 						}
 					}
 				}
-				else if(Manager::Get()->GetValueLabel(vid).c_str(), "Temperature") {
+				else if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Temperature") == 0) {
 					std::string location = Manager::Get()->GetNodeLocation(_notification->GetHomeId(), _notification->GetNodeId());
 					float currentTemp = 20.00;
 					if(Manager::Get()->GetValueAsFloat(vid,&currentTemp)) {
