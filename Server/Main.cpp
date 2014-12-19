@@ -1451,7 +1451,28 @@ std::string process_commands(std::string data) {
 						stringstream ssID;
 						ssID << scid;
 						Manager::Get()->SetSceneLabel(scid, sclabel);
-						output += "Scene created with name " + sclabel +" and scene_id " + ssID.str();
+						sceneList.clear();
+						if(init_Scenes()) {
+							time_t now = time(NULL);
+							Alarm updateAlarm;
+							updateAlarm.description = "Update";
+							updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
+							
+							while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
+								{alarmList.pop_front();}
+							
+							alarmList.push_back(updateAlarm);
+							alarmList.sort();
+							alarmList.unique();
+							
+							signal(SIGALRM, sigalrm_handler);
+							alarm(alarmList.front().alarmtime - now);
+							
+							output += "Scene created with name " + sclabel +" and scene_id " + ssID.str();
+						}
+						else {
+							output += "Scene created, but scenelist could not be refreshed"; //create better error message
+						}
 					}
 					Manager::Get()->WriteConfig(g_homeId);
 					break;
@@ -1970,7 +1991,9 @@ bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, s
 		}
 
 		if(!cmdfound) {
-			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL\n";
+			stringstream ssnode;
+			ssnode << node;
+			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL for node " + ssnode.str() + "\n";
 			return false;
 		}
 	}
