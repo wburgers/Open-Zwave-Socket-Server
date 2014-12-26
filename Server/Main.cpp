@@ -157,7 +157,7 @@ static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Cron, Switch, AtHome, PollInterval, AlarmList, Test, Exit};
+enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Reset, Cron, Switch, AtHome, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
@@ -180,6 +180,7 @@ void create_string_maps() {
 	s_mapStringCommands["ACTIVATE"] = Activate;
 	s_mapStringCommands["CONTROLLER"] = ControllerC;
 	s_mapStringCommands["CANCEL"] = Cancel;
+	s_mapStringCommands["RESET"] = Reset;
 	s_mapStringCommands["CRON"] = Cron;
 	s_mapStringCommands["SWITCH"] = Switch;
 	s_mapStringCommands["ATHOME"] = AtHome;
@@ -1154,10 +1155,6 @@ bool init_Scenes() {
 	uint8 numscenes = 0;
 	uint8 *sceneIds = new uint8[numscenes];
 	
-	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-		return false;
-	}
-	
 	int scid=0;
 	
 	for(int i=0; i<numscenes; ++i) {
@@ -1664,6 +1661,10 @@ std::string process_commands(std::string data) {
 						response = "true";
 					}
 					output += response;
+					break;
+				}
+				case Reset: {
+					Manager::Get()->ResetController(g_homeId);
 					break;
 				}
 				default:
