@@ -1156,6 +1156,10 @@ bool init_Scenes() {
 	uint8 numscenes = 0;
 	uint8 *sceneIds = new uint8[numscenes];
 	
+	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
+		std::cout << "No Scenes found" << endl;
+	}
+	
 	int scid=0;
 	
 	for(int i=0; i<numscenes; ++i) {
