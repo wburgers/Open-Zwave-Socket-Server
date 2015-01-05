@@ -159,7 +159,7 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 // Value-Defintions of the different String values
 enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Reset, Cron, Switch, AtHome, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update};
-enum DeviceOptions {Undefined_Option = 0, Name, Location, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
+enum DeviceOptions {Undefined_Option = 0, Name, Location, SwitchC, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
 static std::map<std::string, DeviceOptions> s_mapStringOptions;
@@ -196,6 +196,7 @@ void create_string_maps() {
 	
 	s_mapStringOptions["Name"] = Name;
 	s_mapStringOptions["Location"] = Location;
+	s_mapStringOptions["Switch"] = SwitchC;
 	s_mapStringOptions["Level"] = Level;
 	s_mapStringOptions["Thermostat Setpoint"] = Thermostat_Setpoint;
 	s_mapStringOptions["Polling"] = Polling;
@@ -1843,6 +1844,12 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 			return init_Rooms(); //can do this more efficiently, patch welcome
 			break;
 		}
+		case SwitchC:
+		{
+			uint8 cmdclass = COMMAND_CLASS_SWITCH_BINARY;
+			return SetValue(home, node, value, cmdclass, "Switch", err_message);
+			break;
+		}
 		case Level:
 		{
 			uint8 cmdclass = COMMAND_CLASS_SWITCH_MULTILEVEL;
@@ -1994,7 +2001,7 @@ bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, s
 		if(!cmdfound) {
 			stringstream ssnode;
 			ssnode << node;
-			err_message += "Couldn't match node to the required COMMAND_CLASS_SWITCH_BINARY or COMMAND_CLASS_SWITCH_MULTILEVEL for node " + ssnode.str() + "\n";
+			err_message += "Could not match node " + ssnode.str() + " to the required command class\n";
 			return false;
 		}
 	}
