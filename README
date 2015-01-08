@@ -3,9 +3,10 @@ When I started, the server was buggy and crashed all the time.
 I decided to create a more stable and smarter server.
 
 Please note that the PHP client is no longer updated.
-I haven't changed the client that much since Thomas started with it.
 I want to have a client with "live" data.
 Websockets are ideal for this purpose.
+The Websockets client is also depricated.
+The functionality of websockets is now integrated in the Polymer Client.
 
 Most of my latest work will be in the Test branch.
 When merging the Test branch into Master, I want my server to be stable.

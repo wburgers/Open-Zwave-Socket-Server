@@ -1,6 +1,6 @@
 {
   "name": "Polymer Client",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "homepage": "https://github.com/wburgers/Open-Zwave-Socket-Server",
   "license": "MIT",
   "private": true,
@@ -20,5 +20,10 @@
   },
   "resolutions": {
     "raphael": "master"
-  }
+  },
+  "description": "Polymer Client for the Open-Zwave-Socket-Server",
+  "main": "index.html",
+  "authors": [
+    "Willem Burgers"
+  ]
 }
