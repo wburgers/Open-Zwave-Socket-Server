@@ -1055,7 +1055,7 @@ int main(int argc, char* argv[]) {
 					pthread_t thread;
 					int thread_sock2;
 					thread_sock2 = new_sock.GetSock();
-					if(pthread_create(&thread , NULL ,  run_socket ,(void*) thread_sock2) < 0) {
+					if(pthread_create(&thread , NULL ,  run_socket ,(void*) (intptr_t) thread_sock2) < 0) {
 						throw std::runtime_error("Unable to create thread");
 					}
 					else {
@@ -1226,7 +1226,7 @@ void *websockets_main(void* arg) {
 //-----------------------------------------------------------------------------
 void *run_socket(void* arg) {
 	Socket thread_sock;
-	thread_sock.SetSock((int)arg);
+	thread_sock.SetSock((intptr_t)arg);
 	while(true) {
 		try { // command parsing errors
 			//get commands from the socket

@@ -1,5 +1,6 @@
 ### Installation instructions:
-First install [libwebsockets](http://github.com/warmcat/libwebsockets).
+First, fully install [libwebsockets](http://github.com/warmcat/libwebsockets).
+To install the libwebsockets headers, don't forget to make install.
 Then download [open-zwave](https://code.google.com/p/open-zwave/) and unpack it.
 You can then clone this repo.
 Place the server folder of the repo in the open-zwave folder as open-zwave/cpp/examples/server, for example with a mount bind.
