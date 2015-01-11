@@ -1,13 +1,31 @@
 ### Installation instructions:
-First, fully install [libwebsockets](http://github.com/warmcat/libwebsockets).
-To install the libwebsockets headers, don't forget to make install.
+First, install dependencies for libwebsockets:
+```
+sudo apt-get install build-essential cmake libssl-dev zlib1g-dev
+```
+Then, fully install [libwebsockets](http://github.com/warmcat/libwebsockets).
+After the git checkout, do:
+```
+cd libwebsockets
+mkdir build
+cd build
+cmake -D LWS_WITHOUT_TESTAPPS=1 ..
+make
+sudo make install
+```
+
+After libwebsockets is completely installed, it is time to build open-zwave and OZSS
+To compile open-zwave, you need libudev-dev, so:
+```
+sudo apt-get install libudev-dev
+```
 Then download [open-zwave](https://code.google.com/p/open-zwave/) and unpack it.
 You can then clone this repo.
 Place the server folder of the repo in the open-zwave folder as open-zwave/cpp/examples/server, for example with a mount bind.
 ```
-mount -rbind /path/to/Open-Zwave-Socket-Server/Server /path/to/open-zwave/cpp/examples/server
+mount --rbind /path/to/Open-Zwave-Socket-Server/Server /path/to/open-zwave/cpp/examples/server
 ```
-From the /path/to/open-zwave/.../server folder call make. This will build both open-zwave and the Socket Server.
+From the /path/to/open-zwave/.../server folder call make. This will build both open-zwave and the Open Zwave Socket Server.
 The exacutable is in the same server folder.
 Copy the config.ini-dist to config.ini and set the options you want.
 I run my server from the root folder of open-zwave.
@@ -15,7 +33,7 @@ I run my server from the root folder of open-zwave.
 cp /path/to/open-zwave/.../server/test /path/to/open-zwave/openzwave-server
 /path/to/open-zwave/openzwave-server &
 ```
-If you want to run it anywhere else, you have to specify the open-zwave config folder in main.cpp and rebuild the server.
+If you want to run it anywhere else, you have to specify the open-zwave config folder in main.cpp and rebuild the server or copy the config folder.
 
 Additionally, you can schedule zcron.sh to be run at a specific time.
 I run mine every day at 4 AM. This schedules my sunrise and sunset triggers.
