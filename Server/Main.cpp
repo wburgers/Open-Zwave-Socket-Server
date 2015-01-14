@@ -118,6 +118,14 @@ struct SceneListItem {
 };
 
 //-----------------------------------------------------------------------------
+// Cached values of Wake-up Intervals
+//-----------------------------------------------------------------------------
+struct WakeupIntervalCacheItem {
+	uint8			nodeId;
+	int				interval;
+};
+
+//-----------------------------------------------------------------------------
 // LibWebSockets messages definitions
 //-----------------------------------------------------------------------------
 #define MAX_MESSAGE_QUEUE 32
@@ -151,6 +159,7 @@ static bool alarmset = false;
 static list<Alarm> alarmList;
 static list<Room> roomList;
 static list<SceneListItem> sceneList;
+static list<WakeupIntervalCacheItem> WakeupIntervalCache;
 static list<NodeInfo*> g_nodes;
 static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
@@ -233,6 +242,7 @@ void create_string_maps() {
 //functions
 bool init_Rooms();
 bool init_Scenes();
+bool init_WakeupIntervalCache();
 void *websockets_main(void* arg);
 void *run_socket(void* arg);
 std::string process_commands(std::string data);
@@ -310,6 +320,12 @@ void OnNotification(Notification const* _notification, void* _context) {
 				// Add the new value to our list
 				nodeInfo->m_values.push_back( _notification->GetValueID());
 			}
+			
+			if(strcmp(Manager::Get()->GetValueLabel(_notification->GetValueID()).c_str(),"Wake-up Interval")==0) {
+				WakeupIntervalCache.clear();
+				init_WakeupIntervalCache();
+			}
+			
 			break;
 		}
 
@@ -390,6 +406,26 @@ void OnNotification(Notification const* _notification, void* _context) {
 					}
 				}
 				
+				//test for Wake-up Interval
+				if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Wake-up Interval") == 0) {
+					for(list<WakeupIntervalCacheItem>::iterator wiciit=WakeupIntervalCache.begin(); wiciit!=WakeupIntervalCache.end(); ++wiciit) {
+						if(nodeInfo->m_nodeId != wiciit->nodeId) {
+							continue;
+						}
+						int interval;
+						if(Manager::Get()->GetValueAsInt(vid,&interval)) {
+							if(wiciit->interval != interval) {
+								stringstream ssInterval;
+								ssInterval << interval;
+								string err_message = "";
+								if(!SetValue(g_homeId, nodeInfo->m_nodeId, ssInterval.str(),COMMAND_CLASS_WAKE_UP, "Wake-up Interval", err_message)) {
+									std::cout << err_message;
+								}
+							}
+						}
+					}
+				}
+				
 				//test for notifications
 				Alarm updateAlarm;
 				updateAlarm.description = "Update";
@@ -443,6 +479,10 @@ void OnNotification(Notification const* _notification, void* _context) {
 					break;
 				}
 			}
+			
+			WakeupIntervalCache.clear();
+			init_WakeupIntervalCache();
+			
 			break;
 		}
 
@@ -1011,6 +1051,10 @@ int main(int argc, char* argv[]) {
 			std::cerr << "Something went wrong configuring the Scenes";
 			return 0;
 		}
+		if(!init_WakeupIntervalCache()) {
+			std::cerr << "Something went wrong configuring the Wake-up Interval Cache";
+			return 0;
+		}
 		Manager::Get()->WriteConfig(g_homeId);
 
 		Driver::DriverData data;
@@ -1148,9 +1192,8 @@ bool init_Rooms() {
 }
 
 //-----------------------------------------------------------------------------
-// init_Rooms
-// Create a list of rooms for the program to maintain
-// The roomlist is built from the devicelist information
+// init_Scenes
+// Create a list of scenes for the program to maintain
 //-----------------------------------------------------------------------------
 bool init_Scenes() {
 	uint8 numscenes = 0;
@@ -1168,6 +1211,27 @@ bool init_Scenes() {
 		newScene.name = Manager::Get()->GetSceneLabel(scid);
 		newScene.active = false;
 		sceneList.push_back(newScene);
+	}
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// init_WakeupIntervalCache
+// Create a list of Wake-up Intervals
+// When bateries are changed, Wake-up Intervals reset to default
+// This cache makes sure that the device is set to the value you chose instead of the default value
+//-----------------------------------------------------------------------------
+bool init_WakeupIntervalCache() {
+	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
+			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Wake-up Interval") == 0) {
+				int interval;
+				WakeupIntervalCacheItem newCacheItem;
+				newCacheItem.nodeId = (*it)->m_nodeId;
+				newCacheItem.interval = Manager::Get()->GetValueAsInt((*vit), &interval);
+				WakeupIntervalCache.push_back(newCacheItem);
+			}
+		}
 	}
 	return true;
 }
@@ -1927,6 +1991,11 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		}
 		case Wake_up_Interval:
 		{
+			for(list<WakeupIntervalCacheItem>::iterator wiciit=WakeupIntervalCache.begin(); wiciit!=WakeupIntervalCache.end(); ++wiciit) {
+				if(wiciit->nodeId == node) {
+					wiciit->interval = lexical_cast<int>(value);
+				}
+			}
 			uint8 cmdclass = COMMAND_CLASS_WAKE_UP;
 			save = true;
 			return SetValue(home, node, value, cmdclass, name, err_message);
