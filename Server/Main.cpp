@@ -409,7 +409,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 						if(Manager::Get()->GetValueAsInt(vid,&interval)) {
 							if(wiciit->interval != interval) {
 								stringstream ssInterval;
-								ssInterval << interval;
+								ssInterval << wiciit->interval;
 								string err_message = "";
 								if(!SetValue(g_homeId, nodeInfo->m_nodeId, ssInterval.str(),COMMAND_CLASS_WAKE_UP, "Wake-up Interval", err_message)) {
 									std::cout << err_message;
@@ -1000,6 +1000,7 @@ int main(int argc, char* argv[]) {
     }
 	
 	// program exit (clean up)
+	Manager::Get()->WriteConfig(g_homeId);
 	std::cout << "Closing connection to Zwave Controller" << endl;
 	
 	if(strcasecmp(port.c_str(), "usb") == 0) {
@@ -1106,10 +1107,13 @@ bool init_WakeupIntervalCache() {
 		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
 			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Wake-up Interval") == 0) {
 				int interval;
-				WakeupIntervalCacheItem newCacheItem;
-				newCacheItem.nodeId = (*it)->m_nodeId;
-				newCacheItem.interval = Manager::Get()->GetValueAsInt((*vit), &interval);
-				WakeupIntervalCache.push_back(newCacheItem);
+				if(Manager::Get()->GetValueAsInt((*vit), &interval)) {
+					WakeupIntervalCacheItem newCacheItem;
+					newCacheItem.nodeId = (*it)->m_nodeId;
+					newCacheItem.interval = interval;
+					WakeupIntervalCache.push_back(newCacheItem);
+				}
+				std::cout << "Interval: " << interval << endl;
 			}
 		}
 	}
