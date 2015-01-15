@@ -135,14 +135,6 @@ static int ringbuffer_head = 0;
 
 struct libwebsocket_context *context;
 
-/*struct WSClient {
-	int id;
-	float lat, lon;
-	bool operator==(WSClient const &other) { return id == other.id;}
-};*/
-
-//static int nextClientID = 0;
-
 //-----------------------------------------------------------------------------
 // definitions
 //-----------------------------------------------------------------------------
@@ -286,7 +278,7 @@ T lexical_cast(const std::string& s) {
 
 //-----------------------------------------------------------------------------
 // <GetNodeInfo>
-// Callback that is triggered when a value, group or node changes
+// retrieve information about a node from the NodeInfo list
 //-----------------------------------------------------------------------------
 NodeInfo* GetNodeInfo(uint32 const homeId, uint8 const nodeId) {
 	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
@@ -565,43 +557,6 @@ void OnNotification(Notification const* _notification, void* _context) {
 		case Notification::Type_Notification:
 			switch(_notification->GetNotification()) {
 				case Notification::Code_Awake: {
-					/*if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
-						if(nodeInfo->m_needsSync) {
-							time_t rawtime;
-							tm * timeinfo;
-							time(&rawtime);
-							timeinfo=localtime(&rawtime);
-							
-							uint32 const homeId = _notification->GetHomeId();
-							uint8 const nodeId = _notification->GetNodeId();
-							std::string err_message = "";
-							
-							const std::string DAY[]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
-							stringstream ssHour, ssMin;
-							ssHour << timeinfo->tm_hour;
-							ssMin << timeinfo->tm_min;
-							
-							try {
-								cout << "Day\n";
-								if(!SetValue(homeId, nodeId, DAY[timeinfo->tm_wday], COMMAND_CLASS_CLOCK, "Day", err_message)) {
-									cout << "Error in timesync (day) for node " << nodeId << ":\n" << err_message << endl;
-								}
-								cout << "Hour\n";
-								cout << ssHour.str() << endl;
-								if(!SetValue(homeId, nodeId, ssHour.str(), COMMAND_CLASS_CLOCK, "Hour", err_message)) {
-									cout << "Error in timesync (hour) for node " << nodeId << ":\n" << err_message << endl;
-								}
-								cout << "Minute\n";
-								if(!SetValue(homeId, nodeId, ssMin.str(), COMMAND_CLASS_CLOCK, "Minute", err_message)) {
-									cout << "Error in timesync (min) for node " << nodeId << ":\n" << err_message << endl;
-								}
-							}
-							catch (std::exception const& e) {
-								std::cout << "Exception: " << e.what() << endl;
-							}
-							nodeInfo->m_needsSync = false;
-						}
-					}*/
 				}
 				default: {
 				}
@@ -730,129 +685,76 @@ void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err
 	switch (err) {
 		case Driver::ControllerError_None:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=None" );
 			break;
 		}
 		case Driver::ControllerError_ButtonNotFound:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Button Not Found" );
 			std::cout << "ControllerError: Button Not Found" << endl;
 			break;
 		}
 		case Driver::ControllerError_NodeNotFound:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Node Not Found" );
 			std::cout << "ControllerError: Node Not Found" << endl;
 			break;
 		}
 		case Driver::ControllerError_NotBridge:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Not a Bridge" );
 			std::cout << "ControllerError: Not a Bridge" << endl;
 			break;
 		}
 		case Driver::ControllerError_NotPrimary:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Not Primary Controller" );
 			std::cout << "ControllerError: Not Primary Controller" << endl;
 			break;
 		}
 		case Driver::ControllerError_IsPrimary:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Is Primary Controller" );
 			std::cout << "ControllerError: Is Primary Controller" << endl;
 			break;
 		}
 		case Driver::ControllerError_NotSUC:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Not Static Update Controller" );
 			std::cout << "ControllerError: Not Static Update Controller" << endl;
 			break;
 		}
 		case Driver::ControllerError_NotSecondary:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Not Secondary Controller" );
 			std::cout << "ControllerError: Not Secondary Controller" << endl;
 			break;
 		}
 		case Driver::ControllerError_NotFound:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Not Found" );
 			std::cout << "ControllerError: Not Found" << endl;
 			break;
 		}
 		case Driver::ControllerError_Busy:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Controller Busy" );
 			std::cout << "ControllerError: Busy" << endl;
 			break;
 		}
 		case Driver::ControllerError_Failed:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Failed" );
 			std::cout << "ControllerError: Failed" << endl;
 			break;
 		}
 		case Driver::ControllerError_Disabled:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Disabled" );
 			std::cout << "ControllerError: Disabled" << endl;
 			break;
 		}
 		case Driver::ControllerError_Overflow:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Overflow" );
 			std::cout << "ControllerError: Overflow" << endl;
 			break;
 		}
 		default:
 		{
-			//WriteLog( LogLevel_Debug, false, "Error=Unknown error (%d)", err );
 			std::cout << "ControllerError: Unknown error" << endl;
 			break;
 		}
 	}
 
 	pthread_mutex_unlock( &g_criticalSection );
-
-	// If the controller isn't busy anymore and we still got something in the queue, fire off the command now
-	/*if ( ctrl->m_controllerBusy == false )
-	{
-		if ( ! ctrl->m_cmd.empty() )
-		{
-			bool response;
-			m_cmdItem cmd;
-
-			cmd = ctrl->m_cmd.front();
-			ctrl->m_cmd.pop_front();
-
-			// Now start the BeginControllerCommand with the 2 supported options
-			switch( cmd.m_command ) {
-				case Driver::ControllerCommand_HasNodeFailed:
-				{
-					//ctrl->m_controllerBusy = true;
-					//WriteLog( LogLevel_Debug, true, "DomoZWave_HasNodeFailed: HomeId=%d Node=%d (Queued)", ctrl->m_homeId, cmd.m_nodeId );
-					response = Manager::Get()->BeginControllerCommand( ctrl->m_homeId, Driver::ControllerCommand_HasNodeFailed, OnControllerUpdate, ctrl, true, cmd.m_nodeId );
-		                        //WriteLog( LogLevel_Debug, false, "Return=%s", (response)?"CommandSend":"ControllerBusy" );
-					break;
-				}
-				case Driver::ControllerCommand_RequestNodeNeighborUpdate:
-				{
-					//ctrl->m_controllerBusy = true;
-					//WriteLog( LogLevel_Debug, true, "DomoZWave_RequestNodeNeighborUpdate: HomeId=%d Node=%d (Queued)", ctrl->m_homeId, cmd.m_nodeId );
-					response = Manager::Get()->BeginControllerCommand( ctrl->m_homeId, Driver::ControllerCommand_RequestNodeNeighborUpdate, OnControllerUpdate, ctrl, false, cmd.m_nodeId );
-		                        //WriteLog( LogLevel_Debug, false, "Return=%s", (response)?"CommandSend":"ControllerBusy" );
-					break;
-				}
-				default:
-				{
-					//WriteLog( LogLevel_Debug, true, "DomoZWave_OnControllerUpdate: HomeId=%d Node=%d (Queued)", ctrl->m_homeId, cmd.m_nodeId );
-					//WriteLog( LogLevel_Debug, false, "ERROR: Invalid Command %d", cmd.m_command );
-					break;
-				}
-			}
-		}
-	}*/
 }
 
 //-----------------------------------------------------------------------------
@@ -914,14 +816,6 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			break;
 		}
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
-			/*std::string clientID = "";
-			stringstream ssClientID;
-			ssClientID << nextClientID;
-			clientID += ssClientID.str();
-			libwebsocket_write(wsi, (unsigned char *)clientID.c_str(), clientID.length(), LWS_WRITE_TEXT);
-			(++nextClientID)%100;
-			std::cout << "sent clientID: " << clientID << endl;*/
-			
 			while (pss->ringbuffer_tail != ringbuffer_head) {
 				char buf[LWS_SEND_BUFFER_PRE_PADDING + ringbuffer[pss->ringbuffer_tail].length() + LWS_SEND_BUFFER_POST_PADDING];
 				
@@ -1028,17 +922,16 @@ int main(int argc, char* argv[]) {
 
     // Add a Z-Wave Driver
     // Modify this line to set the correct serial port for your PC interface.
-
     string port = "/dev/ttyUSB0";
 
     Manager::Get()->AddDriver((argc > 1) ? argv[1] : port);
     //Manager::Get()->AddDriver( "HID Controller", Driver::ControllerInterface_Hid );
-
-    // Now we just wait for the driver to become ready, and then write out the loaded config.
-    // In a normal app, we would be handling notifications and building a UI for the user.
 	
+	// Set the default poll interval to 30 minutes
 	Manager::Get()->SetPollInterval(1000*60*30, false); //default to 30 minutes
 	
+	// Now we just wait for the driver to become ready, and then write out the loaded config.
+    // In a normal app, we would be handling notifications and building a UI for the user.
     pthread_cond_wait(&initCond, &initMutex);
 
     if(!g_initFailed) {
@@ -1075,7 +968,6 @@ int main(int argc, char* argv[]) {
 		}
 		
 		int tcpport;
-		
 		if(!conf->GetTCPPort(tcpport)) {
 			std::cerr << "There is no TCP port set in Config.ini, please specify one and try again.\n";
 			return 0;
@@ -1555,10 +1447,6 @@ std::string process_commands(std::string data) {
 						throw ProtocolException(3, "No scenes created");
 					}
 					
-					//stringstream ssNum;
-					//ssNum << numscenes;
-					//output += "numscenes " + ssNum.str();
-					
 					string sclabel = trim(v[2]);
 					int scid=0;
 					int Node = lexical_cast<int>(v[3]);
@@ -1570,7 +1458,6 @@ std::string process_commands(std::string data) {
 						if(sclabel != Manager::Get()->GetSceneLabel(scid)) {
 							continue;
 						}
-						//output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
 						uint8 cmdclass = 0;
 						if(nodeInfo->m_basicmapping > 0 || try_map_basic(g_homeId, Node)) {
@@ -1626,13 +1513,13 @@ std::string process_commands(std::string data) {
 										break;
 									}
 									default:
-										//output += "unknown ValueType";
+										response = false;
+										output += "unknown ValueType\n";
 										break;
 								}
 								
 								if(!response) {
-									//output+= "Something went wrong\n";
-									//todo: create a better error message
+									output+= "Could not add valueid/value to scene " + sclabel + "\nPlease send me an issue at Github";
 								} else {
 									output += "Added valueid/value to scene " + sclabel;
 								}
@@ -1654,10 +1541,6 @@ std::string process_commands(std::string data) {
 						throw ProtocolException(3, "No scenes created");
 					}
 					
-					//stringstream ssNum;
-					//ssNum << numscenes;
-					//output += "numscenes " + ssNum.str() + "\n";
-					
 					string sclabel = trim(v[2]);
 					int scid=0;
 					int Node = lexical_cast<int>(v[3]);
@@ -1668,7 +1551,6 @@ std::string process_commands(std::string data) {
 						if(sclabel != Manager::Get()->GetSceneLabel(scid)){
 							continue;
 						}
-						//output += "Found right scene\n";
 						NodeInfo* nodeInfo = GetNodeInfo(g_homeId, Node);
 						uint8 cmdclass = 0;
 						if(nodeInfo->m_basicmapping > 0 || try_map_basic(g_homeId, Node)) {
@@ -1708,28 +1590,31 @@ std::string process_commands(std::string data) {
 		}
 		case ControllerC:
 		{
-			string response = "false";
+			bool response = false;
 			switch(s_mapStringCommands[trim(v[1])])
 			{
 				case Add: {
 					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate)) {
-						response = "true";
+						output += "Controller is now in inclusion mode, see the server console for more information";
+					} else {
+						output += "Controller could not be set to inclusion mode, see the server console for more information";
 					}
-					output += response;
 					break;
 				}
 				case Remove: {
 					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_RemoveDevice, OnControllerUpdate)) {
-						response = "true";
+						output += "Controller is now in exclusion mode, see the server console for more information";
+					} else {
+						output += "Controller could not be set to exclusion mode, see the server console for more information";
 					}
-					output += response;
 					break;
 				}
 				case Cancel: {
 					if(Manager::Get()->CancelControllerCommand(g_homeId)) {
-						response = "true";
+						output += "Controller is now back to normal functioning";
+					} else {
+						output += "Controller is stuck in inclusion/exclusion mode, please check the server console";
 					}
-					output += response;
 					break;
 				}
 				case Reset: {
@@ -2317,12 +2202,11 @@ void sigalrm_handler(int sig) {
 	}
 	
 	// more alarms on the alarmList? Set the next one (the list is already sorted...)
-	
 	time_t now = time(NULL);
 	// remove alarms that are set in the past...
 	while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
 	{alarmList.pop_front();}
-					
+	// set the next alarm
 	if(!alarmList.empty() && !alarmset && (alarmList.front().alarmtime > now)) {
 		alarm((alarmList.front().alarmtime - now));
 		alarmset = true;
