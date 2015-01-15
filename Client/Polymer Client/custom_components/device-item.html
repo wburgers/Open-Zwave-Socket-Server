@@ -14,10 +14,12 @@
 			.names {
 				float: left;
 				margin: 10px;
+				font-size: 90%;
 			}
 			.values {
 				float: left;
 				margin: 10px;
+				font-size: 90%;
 			}
 			paper-toggle-button::shadow paper-radio-button::shadow #onRadio {
 				background-color: #4285f4;
@@ -49,11 +51,17 @@
 				<span block>Battery Level</span>
 				<span block>Last Seen</span>
 			</template>
+			<template if="{{device.Values['Wake-up Interval']}}">
+				<span block>Wake-up Interval</span>
+			</template>
 		</div>
 		<div class="values">
 		<template if="{{device.Values['Battery Level']}}">
 				<span block>{{device.Values["Battery Level"]}}</span>
 				<span block>{{device.LastSeen}}</span>
+			</template>
+			<template if="{{device.Values['Wake-up Interval']}}">
+				<span block>{{device.Values['Wake-up Interval']}}</span>
 			</template>
 		</div>
 	</template>
