@@ -243,6 +243,7 @@ bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, s
 std::string activateScene(string sclabel);
 std::string switchAtHome();
 bool try_map_basic(int32 home, int32 node);
+void SetAlarm(std::string description, time_t alarmtime, bool offset);
 void sigalrm_handler(int sig);
 
 //-----------------------------------------------------------------------------
@@ -419,20 +420,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 				}
 				
 				//test for notifications
-				Alarm updateAlarm;
-				updateAlarm.description = "Update";
-				time_t now = time(NULL);
-				updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
-				
-				while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
-					{alarmList.pop_front();}
-				
-				alarmList.push_back(updateAlarm);
-				alarmList.sort();
-				alarmList.unique();
-				
-				signal(SIGALRM, sigalrm_handler);
-				alarm(alarmList.front().alarmtime - now);
+				SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
 			}
 			break;
 		}
@@ -1360,25 +1348,8 @@ std::string process_commands(std::string data) {
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
 			
-			Alarm thermostatAlarm;
-			thermostatAlarm.description = "Thermostat";
-			time_t now = time(NULL);
-			thermostatAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
-			
-			Alarm updateAlarm;
-			updateAlarm.description = "Update";
-			updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT+1;
-			
-			while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
-				{alarmList.pop_front();}
-			
-			alarmList.push_back(thermostatAlarm);
-			alarmList.push_back(updateAlarm);
-			alarmList.sort();
-			alarmList.unique();
-			
-			signal(SIGALRM, sigalrm_handler);
-			alarm(alarmList.front().alarmtime - now);
+			SetAlarm("Thermostat", SOCKET_COLLECTION_TIMEOUT, true);
+			SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT+1, true);
 			break;
 		}
 		case SceneListC:
@@ -1411,21 +1382,7 @@ std::string process_commands(std::string data) {
 						Manager::Get()->SetSceneLabel(scid, sclabel);
 						sceneList.clear();
 						if(init_Scenes()) {
-							time_t now = time(NULL);
-							Alarm updateAlarm;
-							updateAlarm.description = "Update";
-							updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
-							
-							while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
-								{alarmList.pop_front();}
-							
-							alarmList.push_back(updateAlarm);
-							alarmList.sort();
-							alarmList.unique();
-							
-							signal(SIGALRM, sigalrm_handler);
-							alarm(alarmList.front().alarmtime - now);
-							
+							SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
 							output += "Scene created with name " + sclabel +" and scene_id " + ssID.str();
 						}
 						else {
@@ -1590,7 +1547,6 @@ std::string process_commands(std::string data) {
 		}
 		case ControllerC:
 		{
-			bool response = false;
 			switch(s_mapStringCommands[trim(v[1])])
 			{
 				case Add: {
@@ -1634,29 +1590,8 @@ std::string process_commands(std::string data) {
 			float lat, lon;
 			conf->GetLocation(lat, lon);
 			if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
-				Alarm sunriseAlarm;
-				Alarm sunsetAlarm;
-				sunriseAlarm.alarmtime = sunrise;
-				sunsetAlarm.alarmtime = sunset;
-				sunriseAlarm.description = "Sunrise";
-				sunsetAlarm.description = "Sunset";
-				
-				alarmList.push_back(sunriseAlarm);
-				alarmList.push_back(sunsetAlarm);
-			}
-			
-			alarmList.sort(); // sort by timestamp
-			alarmList.unique(); // remove double timestamps
-			
-			time_t now = time(NULL);
-			
-			while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
-			{alarmList.pop_front();}
-			
-			if(!alarmList.empty() && !alarmset && (alarmList.front().alarmtime > now)) {
-				signal(SIGALRM, sigalrm_handler);   
-				alarm(alarmList.front().alarmtime - now);
-				alarmset = true;
+				SetAlarm("Sunrise", sunrise, false);
+				SetAlarm("Sunset", sunset, false);
 			}
 			
 			//synchronize devices with Command_Class_Clock
@@ -1727,20 +1662,7 @@ std::string process_commands(std::string data) {
 		case Switch:
 		{
 			output += switchAtHome();
-			time_t now = time(NULL);
-			Alarm updateAlarm;
-			updateAlarm.description = "Update";
-			updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
-
-			while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
-				{alarmList.pop_front();}
-
-			alarmList.push_back(updateAlarm);
-			alarmList.sort();
-			alarmList.unique();
-
-			signal(SIGALRM, sigalrm_handler);
-			alarm(alarmList.front().alarmtime - now);
+			SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
 			break;
 		}
 		case AtHome:
@@ -2106,6 +2028,27 @@ bool try_map_basic(int32 home, int32 node) {
 		}
 	}
 	return false;
+}
+
+void SetAlarm(std::string description, time_t alarmtime, bool offset) {
+	time_t now = time(NULL);
+	Alarm newAlarm;
+	newAlarm.description = description;
+	if(offset) {
+		newAlarm.alarmtime = now+alarmtime;
+	} else {
+		newAlarm.alarmtime = alarmtime;
+	}
+
+	while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
+		{alarmList.pop_front();}
+
+	alarmList.push_back(newAlarm);
+	alarmList.sort();
+	alarmList.unique();
+
+	signal(SIGALRM, sigalrm_handler);
+	alarm(alarmList.front().alarmtime - now);
 }
 
 //-----------------------------------------------------------------------------
