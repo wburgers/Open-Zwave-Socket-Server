@@ -1842,6 +1842,20 @@ std::string process_commands(std::string data) {
 		case Switch:
 		{
 			output += switchAtHome();
+			time_t now = time(NULL);
+			Alarm updateAlarm;
+			updateAlarm.description = "Update";
+			updateAlarm.alarmtime = now+SOCKET_COLLECTION_TIMEOUT;
+
+			while(!alarmList.empty() && (alarmList.front().alarmtime) <= now)
+				{alarmList.pop_front();}
+
+			alarmList.push_back(updateAlarm);
+			alarmList.sort();
+			alarmList.unique();
+
+			signal(SIGALRM, sigalrm_handler);
+			alarm(alarmList.front().alarmtime - now);
 			break;
 		}
 		case AtHome:
