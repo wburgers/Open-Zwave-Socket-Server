@@ -59,6 +59,7 @@
 #include "sunrise.h"
 #include "Configuration.h"
 #include <libwebsockets.h>
+#include <json/json.h>
 
 //Necessary includes for Main
 #include <time.h>
@@ -237,7 +238,7 @@ bool init_Scenes();
 bool init_WakeupIntervalCache();
 void *websockets_main(void* arg);
 void *run_socket(void* arg);
-std::string process_commands(std::string data);
+std::string process_commands(std::string data, Json::Value& message);
 bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message);
 bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message);
 std::string activateScene(string sclabel);
@@ -782,8 +783,9 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			vector<string> v;
 			split(command, "~", v);
 			std::string response = v[0] + "|";
+			Json::Value message;
 			try {
-				response += process_commands(command);
+				response += process_commands(command, message);
 			}
 			catch (ProtocolException& e) {
 				string what = "ProtocolException: ";
@@ -1185,8 +1187,10 @@ void *run_socket(void* arg) {
 				std::cout << "Socket client closed the connection" << endl;
 				return 0;
 			}
-			
-			thread_sock << process_commands(data) + "\n";
+			Json::Value message;
+			process_commands(data, message);
+			Json::FastWriter fastWriter;
+			thread_sock << fastWriter.write(message) + "\n";
 		}
 		catch (ProtocolException& e) {
 			string what = "ProtocolException: ";
@@ -1207,7 +1211,7 @@ void *run_socket(void* arg) {
 // process_commands
 // when a command comes in, parse it, execute it and send the response back
 //-----------------------------------------------------------------------------
-std::string process_commands(std::string data) {
+std::string process_commands(std::string data, Json::Value& message) {
 	vector<string> v;
 	split(data, "~", v);
 	string output = "";
@@ -1215,53 +1219,48 @@ std::string process_commands(std::string data) {
 	{
 		case AList:
 		{
-			std::string device;
+			message["command"] = "ALIST";
+			int nodepos = 0;
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				NodeInfo* nodeInfo = *it;
-				int nodeID = nodeInfo->m_nodeId;
-				
 				std::string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+				if(nodeType == "Static PC Controller" || nodeType == "") {
+					continue;
+				}
+				
+				Json::Value node;
 				std::string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
-				std::string nodeZone = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
-				std::string nodeValue ="";	//(string) Manager::Get()->RequestNodeState(g_homeId, nodeInfo->m_nodeId);
-										//The point of this was to help me figure out what the node values looked like
+				if(nodeName.size() == 0) {
+					nodeName = "Undefined";
+				}
+				node["Name"] = nodeName;
+				node["ID"] = nodeInfo->m_nodeId;
+				node["Location"] = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
+				node["Type"] = nodeType;
+				
 				for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
 					std::string tempstr="";
 					Manager::Get()->GetValueAsString(*vit,&tempstr);
-					tempstr= "="+tempstr;
-					//hack to delimit values .. need to properly escape all values
-					if(vit != nodeInfo->m_values.begin()) {
-						nodeValue += "<>";
-					}
-					nodeValue += Manager::Get()->GetValueLabel(*vit) +tempstr;
+					node["Values"][Manager::Get()->GetValueLabel(*vit)] = tempstr;
 				}
-
-				if(nodeName.size() == 0)
-					nodeName = "Undefined";
-
-				if(nodeType != "Static PC Controller" && nodeType != "") {
-					stringstream ssNodeName, ssNodeId, ssNodeType, ssNodeZone, ssNodeLastSeen, ssNodeValue;
-					ssNodeName << nodeName;
-					ssNodeId << nodeID;
-					ssNodeType << nodeType;
-					ssNodeZone << nodeZone;
-					char buffer[256];
-					struct tm * timeinfo;
-					timeinfo = localtime(&(nodeInfo->m_LastSeen));
-					if(strftime(buffer, 256, "%a %d %b %R", timeinfo) != 0)
-					{
-						ssNodeLastSeen << buffer;
-					}
-					else {
-						ssNodeLastSeen << trim(ctime(&(nodeInfo->m_LastSeen)));
-					}
-					ssNodeValue << nodeValue;
-					device += "DEVICE~" + ssNodeName.str() + "~" + ssNodeId.str() + "~"+ ssNodeZone.str() +"~" + ssNodeType.str() + "~" + ssNodeLastSeen.str() + "~" + ssNodeValue.str() + "#";
+				stringstream ssNodeLastSeen;
+				char buffer[256];
+				struct tm * timeinfo;
+				timeinfo = localtime(&(nodeInfo->m_LastSeen));
+				if(strftime(buffer, 256, "%a %d %b %R", timeinfo) != 0)
+				{
+					ssNodeLastSeen << buffer;
 				}
+				else {
+					ssNodeLastSeen << trim(ctime(&(nodeInfo->m_LastSeen)));
+				}
+				node["LastSeen"] = ssNodeLastSeen.str();
+				message["nodes"][nodepos] = node;
+				++nodepos;
 			}
-			device = device.substr(0, device.size() - 1);
 			std::cout << "Sent Device List \n";
-			output += device;
+			Json::FastWriter fastWriter;
+			output += fastWriter.write(message);
 			break;
 		}
 		case SetNode:

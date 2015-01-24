@@ -46,7 +46,7 @@ Core:
 	$(LD) $(CFLAGS) Configuration.cpp -o Core.o
 
 test: Main.o Socket Sunrise Core lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Core.o -lwebsockets -pthread -ludev
+	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Core.o -lwebsockets -pthread -ludev -ljsoncpp
 
 clean:
 	rm -f test Main.o Socket.o Sunrise.o Core.o
