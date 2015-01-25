@@ -780,18 +780,14 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			printf("received data: %s\n", (char*) in);
 			
 			std::string command = (char*) in;
-			vector<string> v;
-			split(command, "~", v);
-			std::string response = v[0] + "|";
 			Json::Value message;
+			
 			try {
-				response += process_commands(command, message);
+				process_commands(command, message);
 			}
 			catch (ProtocolException& e) {
-				string what = "ProtocolException: ";
-				what += e.what();
-				what += "\n";
-				response = what;
+				message["error"]["err_main"] = "ProtocolException";
+				message["error"]["err_message"] = e.what();
 			}
 			catch (std::exception const& e) {
 				std::cout << "Exception: " << e.what() << endl;
@@ -799,10 +795,21 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			catch (SocketException& e) {
 				std::cout << "SocketException: " << e.what() << endl;
 			}
-
-			// send the response
-			libwebsocket_write(wsi, (unsigned char *)response.c_str(), response.length(), LWS_WRITE_TEXT);
 			
+			std::string response;
+			Json::FastWriter fastWriter;
+			response = fastWriter.write(message);
+			
+			//put the response in the writebuffer
+			ringbuffer[ringbuffer_head] = response;
+			if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
+				ringbuffer_head = 0;
+			}
+			else {
+				ringbuffer_head++;
+			}
+			
+			libwebsocket_callback_on_writable_all_protocol(libwebsockets_get_protocol(wsi));
 			break;
 		}
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
@@ -1215,11 +1222,11 @@ std::string process_commands(std::string data, Json::Value& message) {
 	vector<string> v;
 	split(data, "~", v);
 	string output = "";
+	message["command"] = trim(v[0]);
 	switch (s_mapStringCommands[trim(v[0])])
 	{
 		case AList:
 		{
-			message["command"] = "ALIST";
 			int nodepos = 0;
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				NodeInfo* nodeInfo = *it;
@@ -1286,8 +1293,8 @@ std::string process_commands(std::string data, Json::Value& message) {
 						std::string value = (*it).substr(found+1);
 						std::string err_message = "";
 						if(!parse_option(g_homeId, Node, name, value, save, err_message)) {
-							output += "Error while parsing options\n";
-							output += err_message;
+							message["error"]["err_main"] = "Error while parsing options";
+							message["error"]["err_message"] = err_message;
 							break;
 						}
 					}
@@ -1300,23 +1307,20 @@ std::string process_commands(std::string data, Json::Value& message) {
 			
 			stringstream ssNode;
 			ssNode << Node;
-			output += "MSG~ZWave Name set Node=" + ssNode.str();
-			
+			message["text"] = "Chosen option set for Node=" + ssNode.str();
 			break;
 		}
 		case RoomListC:
 		{
-			std::string room;
-			stringstream setpoint, currentTemp;
+			int roompos = 0;
 			for(list<Room>::iterator rit=roomList.begin(); rit!=roomList.end(); ++rit) {
-				setpoint.str("");
-				currentTemp.str("");
-				setpoint << rit->setpoint;
-				currentTemp << rit->currentTemp;
-				room += "ROOM~"+rit->name+"~"+setpoint.str()+"~"+currentTemp.str()+"#";
+				Json::Value room;
+				room["Name"] = rit->name;
+				room["currentSetpoint"] = rit->setpoint;
+				room["currentTemp"] = rit->currentTemp;
+				message["rooms"][roompos] = room;
+				++roompos;
 			}
-			room = room.substr(0, room.size() - 1);
-			output += room;
 			break;
 		}
 		case RoomC:
@@ -1347,7 +1351,9 @@ std::string process_commands(std::string data, Json::Value& message) {
 				stringstream setpoint, currentTemp;
 				setpoint << rit->setpoint;
 				currentTemp << rit->currentTemp;
-				output += location + "~" + setpoint.str() +"~"+currentTemp.str();
+				message["room"]["Name"] = location;
+				message["room"]["currentSetpoint"] = rit->setpoint;
+				message["room"]["currentTemp"] = rit->currentTemp;
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
 			
@@ -1357,16 +1363,14 @@ std::string process_commands(std::string data, Json::Value& message) {
 		}
 		case SceneListC:
 		{
-			std::string sceneString;
+			int scenepos = 0;
 			for(list<SceneListItem>::iterator sliit=sceneList.begin(); sliit!=sceneList.end(); ++sliit) {
-				sceneString += "SCENE~"+sliit->name+"~";
-				if(sliit->active) {
-					sceneString += "LastActive";
-				}
-				sceneString += "#";
+				Json::Value scene;
+				scene["Name"] = sliit->name;
+				scene["Active"] = sliit->active;
+				message["scenes"][scenepos] = scene;
+				++scenepos;
 			}
-			sceneString = sceneString.substr(0, sceneString.size() - 1);
-			output += sceneString;
 			break;
 		}
 		case SceneC:
@@ -1386,10 +1390,10 @@ std::string process_commands(std::string data, Json::Value& message) {
 						sceneList.clear();
 						if(init_Scenes()) {
 							SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
-							output += "Scene created with name " + sclabel +" and scene_id " + ssID.str();
+							message["text"] = "Scene created with name " + sclabel +" and scene_id " + ssID.str();
 						}
 						else {
-							output += "Scene created, but scenelist could not be refreshed"; //create better error message
+							message["text"] = "Scene created, but scenelist could not be refreshed"; //create better error message
 						}
 					}
 					Manager::Get()->WriteConfig(g_homeId);
@@ -1474,14 +1478,14 @@ std::string process_commands(std::string data, Json::Value& message) {
 									}
 									default:
 										response = false;
-										output += "unknown ValueType\n";
+										message["error"]["err_message"] = "unknown ValueType";
 										break;
 								}
 								
 								if(!response) {
-									output+= "Could not add valueid/value to scene " + sclabel + "\nPlease send me an issue at Github";
+									message["error"]["err_main"] = "Could not add valueid/value to scene " + sclabel + "\nPlease send me an issue at Github";
 								} else {
-									output += "Added valueid/value to scene " + sclabel;
+									message["text"] = "Added valueid/value to scene " + sclabel;
 								}
 							}
 						}
@@ -1529,8 +1533,8 @@ std::string process_commands(std::string data, Json::Value& message) {
 										continue;
 									}
 								}
-								output += "Remove valueid from scene" + sclabel;
 								Manager::Get()->RemoveSceneValue(scid, (*vit));
+								message["text"] = "Removed valueid from scene" + sclabel;
 							}
 						}
 					}
@@ -1539,7 +1543,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 				}
 				case Activate:
 				{
-					output += activateScene(v[2]);
+					message["text"] = activateScene(v[2]);
 					break;
 				}
 				default:
@@ -1554,30 +1558,31 @@ std::string process_commands(std::string data, Json::Value& message) {
 			{
 				case Add: {
 					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate)) {
-						output += "Controller is now in inclusion mode, see the server console for more information";
+						message["text"] = "Controller is now in inclusion mode, see the server console for more information";
 					} else {
-						output += "Controller could not be set to inclusion mode, see the server console for more information";
+						message["error"]["err_main"] = "Controller could not be set to inclusion mode, see the server console for more information";
 					}
 					break;
 				}
 				case Remove: {
 					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_RemoveDevice, OnControllerUpdate)) {
-						output += "Controller is now in exclusion mode, see the server console for more information";
+						message["text"] = "Controller is now in exclusion mode, see the server console for more information";
 					} else {
-						output += "Controller could not be set to exclusion mode, see the server console for more information";
+						message["error"]["err_main"] = "Controller could not be set to exclusion mode, see the server console for more information";
 					}
 					break;
 				}
 				case Cancel: {
 					if(Manager::Get()->CancelControllerCommand(g_homeId)) {
-						output += "Controller is now back to normal functioning";
+						message["text"] = "Controller is now back to normal functioning";
 					} else {
-						output += "Controller is stuck in inclusion/exclusion mode, please check the server console";
+						message["error"]["err_main"] = "Controller is stuck in inclusion/exclusion mode, please check the server console";
 					}
 					break;
 				}
 				case Reset: {
 					Manager::Get()->ResetController(g_homeId);
+					message["text"] = "The controller has been reset";
 					break;
 				}
 				default:
@@ -1621,7 +1626,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 							else {
 								stringstream ssNodeId;
 								ssNodeId << (*it)->m_nodeId;
-								output += "Could not get the day out of node " + ssNodeId.str();
+								message["error"]["err_message"].append("Could not get the day out of node " + ssNodeId.str());
 							}
 							break;
 						}
@@ -1635,7 +1640,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 							else {
 								stringstream ssNodeId;
 								ssNodeId << (*it)->m_nodeId;
-								output += "Could not get the hour out of node " + ssNodeId.str();
+								message["error"]["err_message"].append("Could not get the hour out of node " + ssNodeId.str());
 							}
 							break;
 						}
@@ -1649,13 +1654,15 @@ std::string process_commands(std::string data, Json::Value& message) {
 							else {
 								stringstream ssNodeId;
 								ssNodeId << (*it)->m_nodeId;
-								output += "Could not get the minute out of node " + ssNodeId.str();
+								message["error"]["err_message"].append("Could not get the minute out of node " + ssNodeId.str());
 							}
 							break;
 						}
-						default:;
-							//output += "could find the current time of node ";
-							//todo create a nice error message here...
+						default:
+							stringstream ssNodeId;
+							ssNodeId << (*it)->m_nodeId;
+							message["error"]["err_main"] = "Could not read the time from node " + ssNodeId.str();
+							break;
 					}
 				}
 				//cout << (*it)->m_needsSync << endl;
@@ -1664,17 +1671,17 @@ std::string process_commands(std::string data, Json::Value& message) {
 		}
 		case Switch:
 		{
-			output += switchAtHome();
+			message["text"] = switchAtHome();
 			SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
 			break;
 		}
 		case AtHome:
 		{
 			if(atHome) {
-				output += "true";
+				message["athome"] = true;
 			}
 			else {
-				output += "false";
+				message["athome"] = false;
 			}
 			break;
 		}
@@ -1685,15 +1692,18 @@ std::string process_commands(std::string data, Json::Value& message) {
 			}
 			int interval = lexical_cast<int>(v[1]); //get the interval in minutes
 			Manager::Get()->SetPollInterval(1000*60*interval, false);
+			message["text"] = "Set poll interval to " + v[1] + " minutes";
 		}
 		case AlarmList:
+		{
+			int alarmpos = 0;
 			for(list<Alarm>::iterator ait = alarmList.begin(); ait!=alarmList.end(); ait++) {
-				stringstream ssTime;
-				ssTime << ait->description << " ";
-				ssTime << ctime(&(ait->alarmtime));
-				output += ssTime.str();
+				message["alarms"][alarmpos]["description"] = ait->description;
+				message["alarms"][alarmpos]["time"] = ctime(&(ait->alarmtime));
+				++alarmpos;
 			}
 			break;
+		}
 		case Test:
 		{
 			break;
