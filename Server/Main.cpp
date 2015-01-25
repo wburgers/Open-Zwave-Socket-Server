@@ -314,9 +314,11 @@ void OnNotification(Notification const* _notification, void* _context) {
 				nodeInfo->m_values.push_back( _notification->GetValueID());
 			}
 			
-			if(strcmp(Manager::Get()->GetValueLabel(_notification->GetValueID()).c_str(),"Wake-up Interval")==0) {
-				WakeupIntervalCache.clear();
-				init_WakeupIntervalCache();
+			if(_notification->GetValueID().GetCommandClassId() == COMMAND_CLASS_WAKE_UP) {
+				if(strcmp(Manager::Get()->GetValueLabel(_notification->GetValueID()).c_str(),"Wake-up Interval")==0) {
+					WakeupIntervalCache.clear();
+					init_WakeupIntervalCache();
+				}
 			}
 			
 			break;
@@ -1105,6 +1107,9 @@ bool init_Scenes() {
 bool init_WakeupIntervalCache() {
 	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
+			if((*vit).GetCommandClassId() != COMMAND_CLASS_WAKE_UP) {
+				continue;
+			}
 			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Wake-up Interval") == 0) {
 				int interval;
 				if(Manager::Get()->GetValueAsInt((*vit), &interval)) {
