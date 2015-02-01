@@ -131,7 +131,13 @@ struct WakeupIntervalCacheItem {
 //-----------------------------------------------------------------------------
 #define MAX_MESSAGE_QUEUE 32
 
-static std::string ringbuffer[MAX_MESSAGE_QUEUE];
+struct LWSMessage {
+	std::string			message;
+	bool				broadcast;
+	struct libwebsocket	*wsi;
+};
+
+static std::vector<LWSMessage> ringbuffer (MAX_MESSAGE_QUEUE);
 static int ringbuffer_head = 0;
 
 struct libwebsocket_context *context;
@@ -803,7 +809,12 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			response = fastWriter.write(message);
 			
 			//put the response in the writebuffer
-			ringbuffer[ringbuffer_head] = response;
+			LWSMessage lwsresponse;
+			lwsresponse.message = response;
+			lwsresponse.broadcast = false;
+			lwsresponse.wsi = wsi;
+			
+			ringbuffer[ringbuffer_head] = lwsresponse;
 			if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
 				ringbuffer_head = 0;
 			}
@@ -816,23 +827,27 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 		}
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
 			while (pss->ringbuffer_tail != ringbuffer_head) {
-				char buf[LWS_SEND_BUFFER_PRE_PADDING + ringbuffer[pss->ringbuffer_tail].length() + LWS_SEND_BUFFER_POST_PADDING];
+				LWSMessage lwsmessage = ringbuffer[pss->ringbuffer_tail];
+				if(lwsmessage.broadcast || (lwsmessage.wsi == wsi)) {
+					char buf[LWS_SEND_BUFFER_PRE_PADDING + lwsmessage.message.length() + LWS_SEND_BUFFER_POST_PADDING];
+					
+					memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], lwsmessage.message.c_str(),
+						   lwsmessage.message.length());
 				
-				memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], ringbuffer[pss->ringbuffer_tail].c_str(),
-					   ringbuffer[pss->ringbuffer_tail].length());
-			
-				n = libwebsocket_write(wsi,
-					(unsigned char *) &buf[LWS_SEND_BUFFER_PRE_PADDING],
-					ringbuffer[pss->ringbuffer_tail].length(),
-					LWS_WRITE_TEXT);
-				if (n < 0) {
-					lwsl_err("ERROR %d writing to mirror socket\n", n);
-					return -1;
+					n = libwebsocket_write(wsi,
+						(unsigned char *) &buf[LWS_SEND_BUFFER_PRE_PADDING],
+						lwsmessage.message.length(),
+						LWS_WRITE_TEXT);
+					if (n < 0) {
+						lwsl_err("ERROR %d writing to mirror socket\n", n);
+						return -1;
+					}
+					if (n < lwsmessage.message.length()) {
+						lwsl_err("mirror partial write %d vs %d\n",
+							n, lwsmessage.message.length());
+					}
 				}
-				if (n < ringbuffer[pss->ringbuffer_tail].length())
-					lwsl_err("mirror partial write %d vs %d\n",
-						   n, ringbuffer[pss->ringbuffer_tail].length());
-
+				
 				if (pss->ringbuffer_tail == (MAX_MESSAGE_QUEUE - 1))
 					pss->ringbuffer_tail = 0;
 				else
@@ -2141,10 +2156,14 @@ void sigalrm_handler(int sig) {
 		}
 		case Update:
 		{
-			std::string WSnotification = "UPDATE";
-			std::cout << "Adding notification to message list\n";
-							
-			ringbuffer[ringbuffer_head] = WSnotification;
+			std::cout << "Adding notification to message list" << endl;
+			
+			LWSMessage lwsmessage;
+			lwsmessage.message = "UPDATE";
+			lwsmessage.broadcast = true;
+			
+			ringbuffer[ringbuffer_head] = lwsmessage;
+			
 			if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
 				ringbuffer_head = 0;
 			}
