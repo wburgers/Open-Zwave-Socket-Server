@@ -31,10 +31,10 @@ LIBS = $(wildcard ../../lib/linux/*.a) $(wildcard ../../lib/*.a) $(wildcard ../.
 %.o : %.cpp
 	$(CXX) $(CFLAGS) $(INCLUDES) -o $@ $<
 
-all: test
+all: openzwave-server
 
 lib:
-	$(MAKE) -C ../../build
+	$(MAKE) -C ../../build -$(MAKEFLAGS)
 
 Socket: Socket.o
 	$(LD) $(CFLAGS) Socket.cpp -o Socket.o
@@ -42,14 +42,15 @@ Socket: Socket.o
 Sunrise: sunrise.o
 	$(LD) -c -Wall sunrise.cpp -o Sunrise.o -lm
 	
-Core:
-	$(LD) $(CFLAGS) Configuration.cpp -o Core.o
+Configuration:
+	$(LD) $(CFLAGS) Configuration.cpp -o Configuration.o
 
-test: Main.o Socket Sunrise Core lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Core.o -lwebsockets -pthread -ludev
+openzwave-server: Main.o Socket Sunrise Configuration lib
+	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Configuration.o -lwebsockets -pthread -ludev
 
 clean:
-	rm -f test Main.o Socket.o Sunrise.o Core.o
+	rm -f openzwave-server *.o
+	cd ../../build/; make clean
 
 XMLLINT := $(shell whereis -b xmllint | cut -c10-)
 
