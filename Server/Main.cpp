@@ -2158,8 +2158,13 @@ void sigalrm_handler(int sig) {
 		{
 			std::cout << "Adding notification to message list" << endl;
 			
+			Json::Value message;
+			message["command"] = "UPDATE";
+			//add individual updates for devices or scenes later
+			
 			LWSMessage lwsmessage;
-			lwsmessage.message = "UPDATE";
+			Json::FastWriter fastWriter;
+			lwsmessage.message = fastWriter.write(message);
 			lwsmessage.broadcast = true;
 			
 			ringbuffer[ringbuffer_head] = lwsmessage;
