@@ -12,9 +12,22 @@ cd build
 cmake -D LWS_WITHOUT_TESTAPPS=1 ..
 make
 sudo make install
+cd
 ```
 
-After libwebsockets is completely installed, it is time to build open-zwave and OZSS
+Next up is [jsoncpp](https://github.com/open-source-parsers/jsoncpp).
+After the git checkout, do:
+```
+cd jsoncpp
+mkdir -p build/debug
+cd build/debug
+cmake -DCMAKE_BUILD_TYPE=debug -DJSONCPP_LIB_BUILD_STATIC=ON -DJSONCPP_LIB_BUILD_SHARED=ON -G "Unix Makefiles" ../..
+make
+sudo make install
+cd
+```
+
+After libwebsockets and jsoncpp are completely installed, it is time to build open-zwave and OZSS
 To compile open-zwave, you need libudev-dev, so:
 ```
 sudo apt-get install libudev-dev
