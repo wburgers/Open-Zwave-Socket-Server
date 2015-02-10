@@ -14,7 +14,7 @@
 			publish: {
 				atHome: false,
 				colorChange: function () {
-					if(this.atHome == "true") {
+					if(this.atHome === true) {
 						this.color = "red";
 					}
 					else {
@@ -27,7 +27,7 @@
 				'atHome': 'switchAtHome',
 			},
 			switchAtHome: function (oldValue,newValue) {
-				if(newValue == "true") {
+				if(newValue === true) {
 					this.color = "green";
 				}
 				else {

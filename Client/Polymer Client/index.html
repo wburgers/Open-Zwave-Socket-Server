@@ -87,12 +87,14 @@
 			var nodeInfo = [];
 			var Rooms = [];
 			var Scenes = [];
-			var single_room;
+			
+			//polymer elements
+			var single_room = document.getElementById('single-room');;
+			var room_list = document.getElementById('room-list');
+			var scene_list = document.getElementById('scene-list');
 			
 			document.addEventListener('polymer-ready', function() {
 				var menu = document.querySelector('core-menu');
-				var room_list = document.getElementById('room-list');
-				single_room = document.getElementById('single-room');
 				var scene_list = document.getElementById('scene-list');
 				websocket_status = document.getElementById('websocket-status');
 				var sendinput = document.getElementById('sendinput');
@@ -123,14 +125,9 @@
 					switchbutton.colorChange();
 					websocket.send("SWITCH");
 				});
-
-				room_list.Rooms = Rooms;
-				room_list.show = menu.selected;
-
-				single_room.Devices = nodeInfo;
-				single_room.show = menu.selected;
 				
-				scene_list.Scenes = Scenes;
+				room_list.show = menu.selected;
+				single_room.show = menu.selected;
 				scene_list.show = menu.selected;
 
 				open_websocket();
@@ -152,82 +149,35 @@
 					};
 					websocket.onmessage = function (message) {
 						console.log(message.data);
-						var splitresponse = message.data.split("|");
-						var command = splitresponse[0];
-						//console.log(command);
+						var parsed = JSON.parse(message.data);
+						var command = parsed.command;
 						var commandSwitch = {
 							"UPDATE": function() {
 								GetDeviceList();
 								//sleep(25, Refresh);
 							},
 							"ALIST": function() {
-								var devices = splitresponse[1].split("#");
-								while(nodeInfo.length > 0) {
-									nodeInfo.pop();
-								}
-								devices.forEach( function(deviceString) {
-									var splitDeviceString = deviceString.split("~");
-									var splitValueString = splitDeviceString[6].split("<>");
-									var values = {};
-									splitValueString.forEach( function(valueString) {
-										var keyvaluepair = valueString.split("=");
-										values[keyvaluepair[0]] = keyvaluepair[1];
-									});
-									var device = {
-										Name: splitDeviceString[1],
-										ID: splitDeviceString[2],
-										Location: splitDeviceString[3],
-										Type: splitDeviceString[4],
-										LastSeen: splitDeviceString[5],
-										Values: values,
-									};
-									
-									nodeInfo.push(device);
-								});
+								single_room.Devices = parsed.nodes.slice();
 							},
 							"ROOMLIST": function() {
-								var roomlistresponse = splitresponse[1].split("#");
-								while(Rooms.length > 0) {
-									Rooms.pop();
-								}
-								roomlistresponse.forEach( function(roomString) {
-									var splitRoomString = roomString.split("~");
-									var room = {
-										Name: splitRoomString[1],
-										currentSetpoint: splitRoomString[2],
-										currentTemp: splitRoomString[3],
-									};
-									Rooms.push(room);
-								});
+								room_list.Rooms = parsed.rooms.slice();
 								updateSingleRoom();
 							},
 							"ROOM": function() {
-								var roomresponse = splitresponse[1].split("~");
-								Rooms.forEach( function(roomitem) {
-									if (roomitem.Name === roomresponse[0]) {
-										roomitem.currentSetpoint = roomresponse[1];
-										roomitem.currentTemp = roomresponse[2];
+								room_list.Rooms.forEach( function(roomitem) {
+									if (roomitem.Name === parsed.room.Name) {
+										roomitem.currentSetpoint = parsed.room.currentSetpoint;
+										roomitem.currentTemp = parsed.room.currentTemp;
 									}
 								});
 							},
 							"SCENELIST": function() {
-								var scenelistresponse = splitresponse[1].split("#");
-								while(Scenes.length > 0) {
-									Scenes.pop();
-								}
-								scenelistresponse.forEach( function(sceneString) {
-									var splitSceneString = sceneString.split("~");
-									var scene = {
-										Name: splitSceneString[1],
-										Active: splitSceneString[2],
-									};
-									Scenes.push(scene);
-								});
+								scene_list.Scenes = parsed.scenes.slice();
 							},
 							"SWITCH": function() {
 							},
 							"ATHOME": function() {
-								switchbutton.atHome = splitresponse[1];
+								switchbutton.atHome = parsed.athome;
 							},
 							"default": function() {
 							},
@@ -260,7 +210,7 @@
 			}
 			function updateSingleRoom() {
 				if(typeof single_room.roomName != 'undefined' && single_room.roomName !== "") {
-					Rooms.forEach( function(roomItem) {
+					room_list.Rooms.forEach( function(roomItem) {
 						if (roomItem.Name === single_room.roomName) {
 							single_room.room = roomItem;
 						}
