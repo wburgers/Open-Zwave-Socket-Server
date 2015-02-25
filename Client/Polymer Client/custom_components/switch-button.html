@@ -12,13 +12,16 @@
 	<script>
 		Polymer('switch-button', {
 			publish: {
-				atHome: false,
+				atHome: undefined,
 				colorChange: function () {
 					if(this.atHome === true) {
 						this.color = "red";
 					}
-					else {
+					else if(this.atHome === true) {
 						this.color = "green";
+					}
+					else {
+						this.color = "grey";
 					}
 				},
 			},
@@ -30,8 +33,11 @@
 				if(newValue === true) {
 					this.color = "green";
 				}
-				else {
+				else if(newValue === false) {
 					this.color = "red";
+				}
+				else {
+					this.color = "grey";
 				}
 			},
 		});
