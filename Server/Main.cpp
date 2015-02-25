@@ -1719,7 +1719,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 			int alarmpos = 0;
 			for(list<Alarm>::iterator ait = alarmList.begin(); ait!=alarmList.end(); ait++) {
 				message["alarms"][alarmpos]["description"] = ait->description;
-				message["alarms"][alarmpos]["time"] = ctime(&(ait->alarmtime));
+				message["alarms"][alarmpos]["time"] = trim(ctime(&(ait->alarmtime)));
 				++alarmpos;
 			}
 			break;
