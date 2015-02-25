@@ -3,50 +3,8 @@
 	<head>
 		<script src="bower_components/webcomponentsjs/webcomponents.js"></script>
 		<script src="settings.js"></script>
-		<link rel="import" href="bower_components/core-toolbar/core-toolbar.html">
-		<link rel="import" href="bower_components/core-menu/core-menu.html">
-		<link rel="import" href="bower_components/core-item/core-item.html">
-		<link rel="import" href="bower_components/core-header-panel/core-header-panel.html">
-		<link rel="import" href="bower_components/core-drawer-panel/core-drawer-panel.html">
-		<link rel="import" href="bower_components/font-roboto/roboto.html">
-		<link rel="import" href="bower_components/core-icons/core-icons.html">
-		<link rel="import" href="bower_components/paper-icon-button/paper-icon-button.html">
-		<link rel="import" href="bower_components/paper-menu-button/paper-menu-button.html">
-		<link rel="import" href="bower_components/paper-input/paper-input.html">
-		
-		<link rel="import" href="custom_components/status-dot.html">
-		<link rel="import" href="custom_components/room-list.html">
-		<link rel="import" href="custom_components/single-room.html">
-		<link rel="import" href="custom_components/scene-list.html">
-		<link rel="import" href="custom_components/switch-button.html">
-		
-		<style>
-			html,body {
-				height: 100%;
-				margin: 0;
-				background-color: #E5E5E5;
-				font-family: 'Roboto2', sans-serif;
-			}
-			core-header-panel {
-				height: 100%;
-			}
-			.menu-panel {
-				background: #E5E5E5;
-			}
-			core-toolbar {
-				background: #03A9F4;
-				color: black;
-			}
-			#navheader {
-				background-color: #56BA89;
-			}
-			core-toolbar paper-input {
-				font-size: 1em;
-			}
-			.content {
-				padding: 20px;
-			}
-		</style>
+		<link rel="import" href="elements.html">
+		<link rel="stylesheet" href="polymer-client.css">
 	</head>
 	<body fullbleed unresolved>
 		<core-drawer-panel  responsiveWidth="980px" drawerWidth="200px" id="drawerPanel">
@@ -69,6 +27,7 @@
 					<paper-input id="sendinput" label="Type commands here..."></paper-input>
 					<switch-button id="switchbutton"></switch-button>
 				</core-toolbar>
+				
 				<div class="content">
 					<room-list id="room-list"></room-list>
 					<single-room id="single-room"></single-room>
@@ -76,147 +35,6 @@
 				</div>
 			</core-header-panel>
 		</core-drawer-panel>
-		<script>
-			/*
-			initialize some vars
-			*/
-			window.WebSocket = window.WebSocket || window.MozWebSocket;
-			var websocket;
-			var websocket_status;
-			var switchbutton;
-			var nodeInfo = [];
-			var Rooms = [];
-			var Scenes = [];
-			
-			//polymer elements
-			var single_room = document.getElementById('single-room');;
-			var room_list = document.getElementById('room-list');
-			var scene_list = document.getElementById('scene-list');
-			
-			document.addEventListener('polymer-ready', function() {
-				var menu = document.querySelector('core-menu');
-				var scene_list = document.getElementById('scene-list');
-				websocket_status = document.getElementById('websocket-status');
-				var sendinput = document.getElementById('sendinput');
-				switchbutton = document.getElementById('switchbutton');
-
-				menu.addEventListener('core-select', function() {
-					room_list.show = menu.selected;
-					single_room.show = menu.selected;
-					scene_list.show = menu.selected;
-				});
-
-				document.addEventListener('change-view', function(e) {
-					menu.selected = e.detail.view;
-					single_room.roomName = e.detail.roomName;
-					updateSingleRoom();
-				});
-				
-				document.addEventListener('send-command', function(e) {
-					websocket.send(e.detail.command);
-				});
-				
-				sendinput.addEventListener('change', function() {
-					websocket.send(sendinput.committedValue);
-					sendinput.value = "";
-				});
-				
-				switchbutton.addEventListener('tap', function() {
-					switchbutton.colorChange();
-					websocket.send("SWITCH");
-				});
-				
-				room_list.show = menu.selected;
-				single_room.show = menu.selected;
-				scene_list.show = menu.selected;
-
-				open_websocket();
-			});
-			
-			function open_websocket() {
-				websocket = new WebSocket('ws://'+server_ip+':'+port, 'open-zwave');
-				try {
-					websocket.onopen = function () {
-						websocket_status.color = 'green';
-						websocket_status.status = 'Connected';
-						//Init();
-						GetDeviceList();
-					};
-					websocket.onerror = function (error) {
-						websocket_status.color = 'red';
-						websocket_status.status = 'Error Check console';
-						console.log("error: " + error.data);
-					};
-					websocket.onmessage = function (message) {
-						console.log(message.data);
-						var parsed = JSON.parse(message.data);
-						var command = parsed.command;
-						var commandSwitch = {
-							"UPDATE": function() {
-								GetDeviceList();
-								//sleep(25, Refresh);
-							},
-							"ALIST": function() {
-								single_room.Devices = parsed.nodes.slice();
-							},
-							"ROOMLIST": function() {
-								room_list.Rooms = parsed.rooms.slice();
-								updateSingleRoom();
-							},
-							"ROOM": function() {
-								room_list.Rooms.forEach( function(roomitem) {
-									if (roomitem.Name === parsed.room.Name) {
-										roomitem.currentSetpoint = parsed.room.currentSetpoint;
-										roomitem.currentTemp = parsed.room.currentTemp;
-									}
-								});
-							},
-							"SCENELIST": function() {
-								scene_list.Scenes = parsed.scenes.slice();
-							},
-							"SWITCH": function() {
-							},
-							"ATHOME": function() {
-								switchbutton.atHome = parsed.athome;
-							},
-							"default": function() {
-							},
-						};
-						
-						if ( commandSwitch[command] ) {
-							commandSwitch[command]();
-						}
-						else {
-							commandSwitch["default"]();
-						}
-					};
-					websocket.onclose = function (event) {
-						websocket_status.color = 'red';
-						websocket_status.status = 'Closed, Check console';
-						console.log("Closed with code: " + event.code + " " + event.reason);
-					};
-				}
-				catch(exception) {
-					alert('Error' + exception);
-				}
-			};
-			function Init() {
-			}
-			function GetDeviceList() {
-				websocket.send("ALIST");
-				websocket.send("ROOMLIST");
-				websocket.send("SCENELIST");
-				websocket.send("ATHOME");
-			}
-			function updateSingleRoom() {
-				if(typeof single_room.roomName != 'undefined' && single_room.roomName !== "") {
-					room_list.Rooms.forEach( function(roomItem) {
-						if (roomItem.Name === single_room.roomName) {
-							single_room.room = roomItem;
-						}
-					});
-				}
-			}
-		</script>
+		<script src="polymer-client.js"></script>
 	</body>
 </html>

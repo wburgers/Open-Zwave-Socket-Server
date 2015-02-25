@@ -1,0 +1,25 @@
+html,body {
+	height: 100%;
+	margin: 0;
+	background-color: #E5E5E5;
+	font-family: 'Roboto2', sans-serif;
+}
+core-header-panel {
+	height: 100%;
+}
+.menu-panel {
+	background: #E5E5E5;
+}
+core-toolbar {
+	background: #03A9F4;
+	color: black;
+}
+#navheader {
+	background-color: #56BA89;
+}
+core-toolbar paper-input {
+	font-size: 1em;
+}
+.content {
+	padding: 20px;
+}
