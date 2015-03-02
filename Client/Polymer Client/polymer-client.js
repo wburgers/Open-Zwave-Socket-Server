@@ -55,7 +55,15 @@ document.addEventListener('polymer-ready', function() {
 });
 
 function open_websocket() {
-	websocket = new WebSocket('ws://'+server_ip+':'+port, 'open-zwave');
+	var connection = '';
+	if(secure) {
+		connection += 'wss://';
+	}
+	else {
+		connection += 'ws://';
+	}
+	connection += server_ip+':'+port;
+	websocket = new WebSocket(connection, 'open-zwave');
 	try {
 		websocket.onopen = function () {
 			websocket_status.color = 'green';

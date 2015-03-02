@@ -6,3 +6,5 @@ morningScene=On
 dayScene=Off
 nightScene=On
 awayScene=Off
+certificate=/etc/ssl/domain.com.pem
+certificate_key=/etc/ssl/domain.com.key

@@ -8,7 +8,7 @@ class Configuration {
 		std::string conf_ini_location;
 		int tcp_port, ws_port;
 		float lat, lon;
-		std::string morningScene, dayScene, nightScene, awayScene;
+		std::string morningScene, dayScene, nightScene, awayScene, certificate, certificate_key;
 		bool open_filestream(std::ifstream& conffile);
 		bool parse_filestream(std::ifstream& conffile);
 		bool parse_variable(std::string name, std::string value);
@@ -22,4 +22,5 @@ class Configuration {
 		bool GetDayScene(std::string &dayScene_);
 		bool GetNightScene(std::string &nightScene_);
 		bool GetAwayScene(std::string &awayScene_);
+		bool GetCertificateInfo(std::string &certificate_, std::string &certificate_key_);
 };

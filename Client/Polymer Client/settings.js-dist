@@ -1,2 +1,3 @@
 var server_ip = 'put_your_server_ip_here';
 var port = '60005';
+var secure = false;

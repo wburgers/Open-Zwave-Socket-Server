@@ -6,7 +6,7 @@
 #include <sstream>
 #include <map>
 
-enum contents {Undefined = 0, tcp_port_n, ws_port_n, lat_n, lon_n, morningScene_n, dayScene_n, nightScene_n, awayScene_n};
+enum contents {Undefined = 0, tcp_port_n, ws_port_n, lat_n, lon_n, morningScene_n, dayScene_n, nightScene_n, awayScene_n, certificate_n, certificate_key_n};
 static std::map<std::string, contents> s_mapStringValues;
 
 template <typename T>
@@ -29,7 +29,9 @@ Configuration::Configuration() :	conf_ini_location("./cpp/examples/server/Config
 									morningScene(""),
 									dayScene(""),
 									nightScene(""),
-									awayScene("") {
+									awayScene(""),
+									certificate(""),
+									certificate_key("") {
 	create_string_map();
 	std::ifstream conffile;
 	if(open_filestream(conffile))
@@ -97,6 +99,7 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 				break;
 			case morningScene_n:
 				morningScene = value;
+				break;
 			case dayScene_n:
 				dayScene = value;
 				break;
@@ -105,6 +108,12 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 				break;
 			case awayScene_n:
 				awayScene = value;
+				break;
+			case certificate_n:
+				certificate = value;
+				break;
+			case certificate_key_n:
+				certificate_key = value;
 				break;
 			default:
 				return false;
@@ -126,6 +135,8 @@ void Configuration::create_string_map() {
 	s_mapStringValues["dayScene"] = dayScene_n;
 	s_mapStringValues["nightScene"] = nightScene_n;
 	s_mapStringValues["awayScene"] = awayScene_n;
+	s_mapStringValues["certificate"] = certificate_n;
+	s_mapStringValues["certificate_key"] = certificate_key_n;
 }
 
 bool Configuration::GetTCPPort(int &port_) {
@@ -168,5 +179,10 @@ bool Configuration::GetNightScene(std::string &nightScene_) {
 }
 bool Configuration::GetAwayScene(std::string &awayScene_) {
 	awayScene_ = awayScene;
+	return true;
+}
+bool Configuration::GetCertificateInfo(std::string &certificate_, std::string &certificate_key_) {
+	certificate_ = certificate;
+	certificate_key_ = certificate_key;
 	return true;
 }

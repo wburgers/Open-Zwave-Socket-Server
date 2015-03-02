@@ -43,7 +43,7 @@ The exacutable is in the same server folder.
 Copy the config.ini-dist to config.ini and set the options you want.
 I run my server from the root folder of open-zwave.
 ```
-cp /path/to/open-zwave/.../server/test /path/to/open-zwave/openzwave-server
+cp /path/to/open-zwave/.../server/openzwave-server /path/to/open-zwave/openzwave-server
 /path/to/open-zwave/openzwave-server &
 ```
 If you want to run it anywhere else, you have to specify the open-zwave config folder in main.cpp and rebuild the server or copy the config folder.

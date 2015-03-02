@@ -1161,8 +1161,16 @@ void *websockets_main(void* arg) {
 	}
 	const char *interface = NULL;
 	
-	const char *cert_path =  NULL;//"./cpp/examples/server/cert/server.crt";
-	const char *key_path = NULL;//"./cpp/examples/server/cert/server.key";
+	const char *cert_path = NULL;
+	const char *key_path = NULL;
+	
+	std::string certificate, certificate_key;
+	conf->GetCertificateInfo(certificate, certificate_key);
+	
+	if(!certificate.empty() && !certificate_key.empty()) {
+		cert_path = certificate.c_str();
+		key_path = certificate_key.c_str();
+	}
 
 	// no special options
 	int opts = 0;
@@ -1183,6 +1191,7 @@ void *websockets_main(void* arg) {
 	// make sure it starts
 	if(context == NULL) {
 		std::cerr << "libwebsocket init failed\n";
+		stopping = true; //notify the other threads
 		return 0;
 	}
 	std::cout << "starting websocket server...\n";
@@ -1210,7 +1219,7 @@ void *run_socket(void* arg) {
 			std::string data;
 			thread_sock >> data;
 			
-			if(strcmp(data.c_str(), "") == 0){ //client closed the connection
+			if(data.empty()) { //client closed the connection
 				std::cout << "Socket client closed the connection" << endl;
 				return 0;
 			}
