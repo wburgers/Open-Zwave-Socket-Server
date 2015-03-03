@@ -10,7 +10,7 @@ var Rooms = [];
 var Scenes = [];
 
 //polymer elements
-var single_room = document.getElementById('single-room');;
+var single_room = document.getElementById('single-room');
 var room_list = document.getElementById('room-list');
 var scene_list = document.getElementById('scene-list');
 
