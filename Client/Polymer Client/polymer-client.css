@@ -15,10 +15,13 @@ core-toolbar {
 	color: black;
 }
 #navheader {
-	background-color: #56BA89;
+	background-color: #03A9F4;
 }
 core-toolbar paper-input {
 	font-size: 1em;
+}
+google-signin {
+	margin-top: 15px;
 }
 .content {
 	padding: 20px;
