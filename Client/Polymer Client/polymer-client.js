@@ -68,8 +68,6 @@ function open_websocket() {
 		websocket.onopen = function () {
 			websocket_status.color = 'green';
 			websocket_status.status = 'Connected';
-			//Init();
-			GetDeviceList();
 		};
 		websocket.onerror = function (error) {
 			websocket_status.color = 'red';
@@ -81,9 +79,13 @@ function open_websocket() {
 			var parsed = JSON.parse(message.data);
 			var command = parsed.command;
 			var commandSwitch = {
+				"AUTH": function() {
+					if(parsed.auth === true) {
+						GetDeviceList();
+					}
+				},
 				"UPDATE": function() {
 					GetDeviceList();
-					//sleep(25, Refresh);
 				},
 				"ALIST": function() {
 					single_room.Devices = parsed.nodes.slice();
@@ -129,9 +131,6 @@ function open_websocket() {
 		alert('Error' + exception);
 	}
 };
-
-function Init() {
-}
 
 function GetDeviceList() {
 	websocket.send("ALIST");

@@ -165,7 +165,7 @@ static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
-enum Commands {Undefined_command = 0, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Reset, Cron, Switch, AtHome, PollInterval, AlarmList, Test, Exit};
+enum Commands {Undefined_command = 0, Auth, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Reset, Cron, Switch, AtHome, PollInterval, AlarmList, Test, Exit};
 enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, SwitchC, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
@@ -174,6 +174,7 @@ static std::map<std::string, DeviceOptions> s_mapStringOptions;
 static std::map<std::string, int> MapCommandClassBasic;
 
 void create_string_maps() {
+	s_mapStringCommands["AUTH"] = Auth;
 	s_mapStringCommands["ALIST"] = AList;
 	s_mapStringCommands["SETNODE"] = SetNode;
 	s_mapStringCommands["ROOMLIST"] = RoomListC;
@@ -1254,6 +1255,11 @@ std::string process_commands(std::string data, Json::Value& message) {
 	message["command"] = trim(v[0]);
 	switch (s_mapStringCommands[trim(v[0])])
 	{
+		case Auth:
+		{
+			message["auth"] = true;
+			break;
+		}
 		case AList:
 		{
 			int nodepos = 0;
@@ -1295,8 +1301,6 @@ std::string process_commands(std::string data, Json::Value& message) {
 				++nodepos;
 			}
 			std::cout << "Sent Device List \n";
-			Json::FastWriter fastWriter;
-			output += fastWriter.write(message);
 			break;
 		}
 		case SetNode:
