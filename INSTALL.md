@@ -4,7 +4,7 @@ First, install dependencies for libwebsockets:
 sudo apt-get install build-essential cmake libssl-dev zlib1g-dev
 ```
 Then, fully install [libwebsockets](http://github.com/warmcat/libwebsockets).
-After the git checkout, do:
+After the git clone, do:
 ```
 cd libwebsockets
 mkdir build
@@ -16,7 +16,7 @@ cd
 ```
 
 Next up is [jsoncpp](https://github.com/open-source-parsers/jsoncpp).
-After the git checkout, do:
+After the git clone, do:
 ```
 cd jsoncpp
 mkdir -p build/debug
@@ -32,9 +32,9 @@ To compile open-zwave, you need libudev-dev, so:
 ```
 sudo apt-get install libudev-dev
 ```
-Then download [open-zwave](https://code.google.com/p/open-zwave/) and unpack it.
+Then clone [open-zwave](https://github.com/OpenZWave/open-zwave).
 You can then clone this repo.
-Place the server folder of the repo in the open-zwave folder as open-zwave/cpp/examples/server, for example with a mount bind.
+Place the server folder of this repo in the open-zwave folder as open-zwave/cpp/examples/server, for example with a mount bind.
 ```
 mount --rbind /path/to/Open-Zwave-Socket-Server/Server /path/to/open-zwave/cpp/examples/server
 ```
