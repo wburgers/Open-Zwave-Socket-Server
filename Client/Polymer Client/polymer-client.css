@@ -26,3 +26,6 @@ google-signin {
 .content {
 	padding: 20px;
 }
+#sendinput {
+	margin-left: 5px;
+}

@@ -13,7 +13,6 @@
 				margin: 10px;
 			}
 			#temperature-inner {
-				width: 760px;
 				margin: auto;
 			}
 			.gauge {
@@ -34,14 +33,12 @@
 				margin: 43px;
 			}
 		</style>
-		<div id="temperature" hidden?="{{show != 10}}">
-			<div id="temperature-inner">
-				<div class="gauge" id="current-temp"></div>
-				<div class="gauge" id="setpoint-temp"></div>
-				<div class="temp-buttons">
-					<paper-fab class="temp-button" id="PLUS" icon="add" on-tap="{{buttonTap}}"></paper-fab>
-					<paper-fab class="temp-button" id="MINUS" icon="remove" on-tap="{{buttonTap}}" style="background: #5677fc;"></paper-fab>
-				</div>
+		<div id="temperature" hidden?="{{show != 10}}" layout horizontal wrap>
+			<div class="gauge" id="current-temp"></div>
+			<div class="gauge" id="setpoint-temp"></div>
+			<div class="temp-buttons">
+				<paper-fab class="temp-button" id="PLUS" icon="add" on-tap="{{buttonTap}}"></paper-fab>
+				<paper-fab class="temp-button" id="MINUS" icon="remove" on-tap="{{buttonTap}}" style="background: #5677fc;"></paper-fab>
 			</div>
 		</div>
 		<div layout horizontal wrap>

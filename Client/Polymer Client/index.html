@@ -5,9 +5,10 @@
 		<script src="settings.js"></script>
 		<link rel="import" href="elements.html">
 		<link rel="stylesheet" href="polymer-client.css">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	</head>
 	<body fullbleed unresolved>
-		<core-drawer-panel  responsiveWidth="980px" drawerWidth="150px" id="drawerPanel">
+		<core-drawer-panel  responsiveWidth="980px" drawerWidth="190px" id="drawerPanel">
 			<core-header-panel class="menu-panel" drawer>
 				<core-toolbar id="navheader">
 					<span>Menu</span>
@@ -19,6 +20,7 @@
 					<core-item label="Scenes"></core-item>
 					<core-item label="Controller"></core-item>
 				</core-menu>
+				<paper-input id="sendinput" label="Type commands here..."></paper-input>
 			</core-header-panel>
 			
 			<core-header-panel main>
@@ -26,7 +28,6 @@
 					<paper-icon-button core-drawer-toggle icon="menu"></paper-icon-button>
 					<span flex>Polymer-Client</span>
 					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
-					<paper-input id="sendinput" label="Type commands here..."></paper-input>
 					<switch-button id="switchbutton"></switch-button>
 				</core-toolbar>
 				
