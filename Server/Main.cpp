@@ -1006,7 +1006,7 @@ int main(int argc, char* argv[]) {
 					pthread_t thread;
 					int thread_sock2;
 					thread_sock2 = new_sock.GetSock();
-					if(pthread_create(&thread , NULL ,  run_socket ,(void*) (intptr_t) thread_sock2) < 0) {
+					if(pthread_create(&thread, NULL, run_socket, (void*) (intptr_t) thread_sock2) < 0) {
 						throw std::runtime_error("Unable to create thread");
 					}
 					else {
@@ -1027,6 +1027,8 @@ int main(int argc, char* argv[]) {
     }
 	
 	// program exit (clean up)
+	delete server;
+	delete conf;
 	Manager::Get()->WriteConfig(g_homeId);
 	std::cout << "Closing connection to Zwave Controller" << endl;
 	
@@ -1120,6 +1122,7 @@ bool init_Scenes() {
 		newScene.active = false;
 		sceneList.push_back(newScene);
 	}
+	delete sceneIds;
 	return true;
 }
 
@@ -1523,6 +1526,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 							}
 						}
 					}
+					delete sceneIds;
 					Manager::Get()->WriteConfig(g_homeId);
 					break;
 				}
@@ -1571,6 +1575,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 							}
 						}
 					}
+					delete sceneIds;
 					Manager::Get()->WriteConfig(g_homeId);
 					break;
 				}
@@ -1743,7 +1748,6 @@ std::string process_commands(std::string data, Json::Value& message) {
 		}
 		case Exit:
 			stopping = true;
-			delete server;
 			break;
 		default:
 			throw ProtocolException(1, "Unknown command");
@@ -1975,9 +1979,11 @@ std::string activateScene(std::string sclabel) {
 		if(sclabel != Manager::Get()->GetSceneLabel(scid)){
 			continue;
 		}
+		delete sceneIds;
 		Manager::Get()->ActivateScene(scid);
 		return "Activate scene "+sclabel;
 	}
+	delete sceneIds;
 	throw ProtocolException(4, "Scene not found");
 }
 
