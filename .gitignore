@@ -9,6 +9,7 @@ settings.js
 .DS_Store
 .idea/**
 bower_components/
+node_modules/
 
 *.crt
 *.csr
