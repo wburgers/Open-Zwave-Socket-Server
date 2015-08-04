@@ -24,9 +24,6 @@
 	"OZWSS-Polymer-scene-list": "git://github.com/wburgers/OZWSS-Polymer-scene-list#master",
 	"OZWSS-Polymer-single-room": "git://github.com/wburgers/OZWSS-Polymer-single-room#master"
   },
-  "resolutions": {
-    "raphael": "master"
-  },
   "description": "Polymer Client for the Open-Zwave-Socket-Server",
   "main": "index.html",
   "authors": [
