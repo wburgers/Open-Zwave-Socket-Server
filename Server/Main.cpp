@@ -60,10 +60,13 @@
 #include "Configuration.h"
 #include <libwebsockets.h>
 #include <json/json.h>
+#include <libsocket/unixclientstream.hpp>
+#include <libsocket/exception.hpp>
 
 //Necessary includes for Main
 #include <time.h>
 #include <string>
+#include <string.h>
 #include <iostream>
 #include <stdio.h>
 #include <vector>
@@ -382,10 +385,10 @@ void OnNotification(Notification const* _notification, void* _context) {
 									if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*nit)->m_nodeId).c_str(), "Setpoint Thermostat") !=0) {
 										continue;
 									}
-									stringstream ssCurrentTemp;
-									ssCurrentTemp << rit->setpoint;
+									stringstream ssCurrentSetpoint;
+									ssCurrentSetpoint << rit->setpoint;
 									string err_message = "";
-									if(!SetValue(g_homeId, (*nit)->m_nodeId, ssCurrentTemp.str(), COMMAND_CLASS_THERMOSTAT_SETPOINT, "Heating 1", err_message)) {
+									if(!SetValue(g_homeId, (*nit)->m_nodeId, ssCurrentSetpoint.str(), COMMAND_CLASS_THERMOSTAT_SETPOINT, "Heating 1", err_message)) {
 										std::cout << err_message;
 									}
 								}
@@ -768,6 +771,7 @@ static int httpCallback(struct libwebsocket_context *context,
 
 struct per_session_data__open_zwave {
 	int ringbuffer_tail;
+	bool authenticated;
 };
 
 static int open_zwaveCallback(	struct libwebsocket_context *context,
@@ -781,6 +785,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 	switch(reason) {
 		case LWS_CALLBACK_ESTABLISHED: {
 			pss->ringbuffer_tail = ringbuffer_head;
+			pss->authenticated = false;
 			std::cout << "WebSocket connection established" << endl;
 			break;
 		}
@@ -788,11 +793,12 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			// log what we recieved.
 			printf("received data: %s\n", (char*) in);
 			
-			std::string command = (char*) in;
+			std::string data = (char*) in;
 			Json::Value message;
 			
 			try {
-				process_commands(command, message);
+				if(pss->authenticated || data.compare(0,4,"AUTH") == 0)
+					process_commands(data, message);
 			}
 			catch (ProtocolException& e) {
 				message["error"]["err_main"] = "ProtocolException";
@@ -803,6 +809,10 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			}
 			catch (SocketException& e) {
 				std::cout << "SocketException: " << e.what() << endl;
+			}
+			
+			if(data.compare(0,4,"AUTH") == 0 && message["auth"] == true) {
+				pss->authenticated = true;
 			}
 			
 			std::string response;
@@ -829,7 +839,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
 			while (pss->ringbuffer_tail != ringbuffer_head) {
 				LWSMessage lwsmessage = ringbuffer[pss->ringbuffer_tail];
-				if(lwsmessage.broadcast || (lwsmessage.wsi == wsi)) {
+				if(pss->authenticated && (lwsmessage.broadcast || (lwsmessage.wsi == wsi))) {
 					char buf[LWS_SEND_BUFFER_PRE_PADDING + lwsmessage.message.length() + LWS_SEND_BUFFER_POST_PADDING];
 					
 					memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], lwsmessage.message.c_str(),
@@ -1260,7 +1270,40 @@ std::string process_commands(std::string data, Json::Value& message) {
 	{
 		case Auth:
 		{
-			message["auth"] = true;
+			std::string client_id, client_secret;
+			if(conf->GetGoogleClientIdAndSecret(client_id, client_secret)) {
+				using libsocket::unix_stream_client;
+				message["auth"] = false;
+				Json::Value gapi_message;
+				gapi_message["access_token"] = v[1];
+				gapi_message["client_id"] = client_id;
+				gapi_message["client_secret"] = client_secret;
+				gapi_message["redirect_url"] = "";
+				
+				std::string tokeninfo_response(1024,NULL), profile(2048,NULL), closing_data(1024,NULL);
+				
+				try {
+					unix_stream_client sock("/tmp/gapi.sock");
+					
+					Json::FastWriter fastWriter;
+					sock << fastWriter.write(gapi_message).c_str();
+					sock >> tokeninfo_response;
+					sock >> profile;
+					sock.shutdown(LIBSOCKET_WRITE);
+					sock >> closing_data;
+					
+					if(!tokeninfo_response.empty() && !profile.empty())
+					{
+						message["profile"] = profile;
+						message["auth"] = true;
+					}
+				}
+				catch (const libsocket::socket_exception& exc) {
+					message["error"]["err_main"] = "Could not authenticate";
+					message["error"]["err_message"] = "Failed communicate with the Google api wrapper";
+					break;
+				}
+			}
 			break;
 		}
 		case AList:
@@ -1348,15 +1391,17 @@ std::string process_commands(std::string data, Json::Value& message) {
 		}
 		case RoomListC:
 		{
-			int roompos = 0;
+			Json::Value rooms(Json::arrayValue);
 			for(list<Room>::iterator rit=roomList.begin(); rit!=roomList.end(); ++rit) {
 				Json::Value room;
 				room["Name"] = rit->name;
 				room["currentSetpoint"] = rit->setpoint;
-				room["currentTemp"] = rit->currentTemp;
-				message["rooms"][roompos] = room;
-				++roompos;
+				stringstream ssCurrentTemp;
+				ssCurrentTemp << rit->currentTemp;
+				room["currentTemp"] = ssCurrentTemp.str();
+				rooms.append(room);
 			}
+			message["rooms"] = rooms;
 			break;
 		}
 		case RoomC:
@@ -1389,7 +1434,9 @@ std::string process_commands(std::string data, Json::Value& message) {
 				currentTemp << rit->currentTemp;
 				message["room"]["Name"] = location;
 				message["room"]["currentSetpoint"] = rit->setpoint;
-				message["room"]["currentTemp"] = rit->currentTemp;
+				stringstream ssCurrentTemp;
+				ssCurrentTemp << rit->currentTemp;
+				message["room"]["currentTemp"] = ssCurrentTemp.str();
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
 			

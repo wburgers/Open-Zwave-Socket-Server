@@ -8,3 +8,5 @@ nightScene=On
 awayScene=Off
 certificate=/etc/ssl/domain.com.pem
 certificate_key=/etc/ssl/domain.com.key
+google_client_key=PUT YOUR CLIENT KEY HERE
+google_client_secret=PUT YOUR CLIENT SECRET HERE

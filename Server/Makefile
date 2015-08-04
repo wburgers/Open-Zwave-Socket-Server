@@ -46,7 +46,7 @@ Configuration:
 	$(LD) $(CFLAGS) Configuration.cpp -o Configuration.o
 
 openzwave-server: Main.o Socket Sunrise Configuration lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Configuration.o -lwebsockets -pthread -ludev -ljsoncpp
+	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Configuration.o -lwebsockets -pthread -ludev -ljsoncpp -lsocket++
 
 clean:
 	rm -f openzwave-server *.o

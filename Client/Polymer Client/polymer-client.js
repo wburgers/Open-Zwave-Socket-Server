@@ -1,60 +1,87 @@
-/*
-initialize some vars
-*/
-window.WebSocket = window.WebSocket || window.MozWebSocket;
+var app;
 var websocket;
-var websocket_status;
+var websocketStatus;
 var switchbutton;
-var nodeInfo = [];
-var Rooms = [];
-var Scenes = [];
+var google_signin;
+var google_signin_status;
+var room_list;
+var single_room;
+var scene_list;
+var sendinput;
+var drawerPanel;
 
-//polymer elements
-var single_room = document.getElementById('single-room');
-var room_list = document.getElementById('room-list');
-var scene_list = document.getElementById('scene-list');
+(function (document) {
+	'use strict';
 
-document.addEventListener('polymer-ready', function() {
-	var menu = document.querySelector('core-menu');
-	var scene_list = document.getElementById('scene-list');
-	websocket_status = document.getElementById('websocket-status');
-	var sendinput = document.getElementById('sendinput');
-	switchbutton = document.getElementById('switchbutton');
+	// Grab a reference to our auto-binding template
+	// and give it some initial binding values
+	// Learn more about auto-binding templates at http://goo.gl/Dx1u2g
+	app = document.querySelector('#app');
 
-	menu.addEventListener('core-select', function() {
-		room_list.show = menu.selected;
-		single_room.show = menu.selected;
-		scene_list.show = menu.selected;
-	});
-
-	document.addEventListener('change-view', function(e) {
-		menu.selected = e.detail.view;
-		single_room.roomName = e.detail.roomName;
-		updateSingleRoom();
+	// Listen for template bound event to know when bindings
+	// have resolved and content has been stamped to the page
+	app.addEventListener('dom-change', function() {
+		registerGlobals();
+		registerEventListeners();
+		openWebsocket();
 	});
 	
-	document.addEventListener('send-command', function(e) {
-		websocket.send(e.detail.command);
+	app.route = "rooms";
+
+	// See https://github.com/Polymer/polymer/issues/1381
+	window.addEventListener('WebComponentsReady', function() {
+		document.querySelector('body').removeAttribute('unresolved');
 	});
 	
-	sendinput.addEventListener('change', function() {
-		websocket.send(sendinput.committedValue);
-		sendinput.value = "";
-	});
-	
+	// Close drawer after menu item is selected if drawerPanel is narrow
+	app.onMenuSelect = function() {
+	};
+})(document);
+
+function registerGlobals() {
+	websocketStatus = document.querySelector('#websocket-status');
+	switchbutton = document.querySelector('#switch-button');
+	google_signin = document.getElementById('google-signin');
+	google_signin.clientId = client_id;
+	google_signin_status = document.getElementById('google-signin-status');
+	room_list = document.getElementById('room-list');
+	single_room = document.getElementById('single-room');
+	scene_list = document.getElementById('scene-list');
+	sendinput = document.getElementById('sendinput');
+	drawerPanel = document.getElementById('paperDrawerPanel');
+};
+
+function registerEventListeners()
+{	
 	switchbutton.addEventListener('tap', function() {
-		switchbutton.colorChange();
+		switchbutton.changeColor();
 		websocket.send("SWITCH");
 	});
 	
-	room_list.show = menu.selected;
-	single_room.show = menu.selected;
-	scene_list.show = menu.selected;
+	sendinput.addEventListener('change', function() {
+		websocket.send(sendinput.value);
+		sendinput.value = "";
+	});
+	
+	document.addEventListener('send-command', function(e) {
+		console.log("Sending command", e.detail.command);
+		websocket.send(e.detail.command);
+	});
+	
+	app.onMenuSelect = function() {
+		if (drawerPanel.narrow) {
+			drawerPanel.closeDrawer();
+		}
+	}
+	
+	document.addEventListener('change-view', function(e) {
+		app.route = e.detail.view;
+		single_room.roomName = e.detail.roomName;
+		updateSingleRoom();
+	});
+}
 
-	open_websocket();
-});
-
-function open_websocket() {
+function openWebsocket() {
 	var connection = '';
 	if(secure) {
 		connection += 'wss://';
@@ -66,12 +93,13 @@ function open_websocket() {
 	websocket = new WebSocket(connection, 'open-zwave');
 	try {
 		websocket.onopen = function () {
-			websocket_status.color = 'green';
-			websocket_status.status = 'Connected';
+			console.log("WEBSOCKET", "opening websocket");
+			websocketStatus.color = 'green';
+			websocketStatus.status = 'Connected';
 		};
 		websocket.onerror = function (error) {
-			websocket_status.color = 'red';
-			websocket_status.status = 'Error Check console';
+			websocketStatus.color = 'red';
+			websocketStatus.status = 'Error Check console';
 			console.log("error: " + error.data);
 		};
 		websocket.onmessage = function (message) {
@@ -81,6 +109,7 @@ function open_websocket() {
 			var commandSwitch = {
 				"AUTH": function() {
 					if(parsed.auth === true) {
+						google_signin_status.profile = JSON.parse(parsed.profile);
 						GetDeviceList();
 					}
 				},
@@ -95,10 +124,12 @@ function open_websocket() {
 					updateSingleRoom();
 				},
 				"ROOM": function() {
-					room_list.Rooms.forEach( function(roomitem) {
-						if (roomitem.Name === parsed.room.Name) {
-							roomitem.currentSetpoint = parsed.room.currentSetpoint;
-							roomitem.currentTemp = parsed.room.currentTemp;
+					room_list.Rooms.forEach( function(roomItem) {
+						if (roomItem.Name === parsed.room.Name) {
+							roomItem.currentTemp = parsed.room.currentTemp;
+							roomItem.currentSetpoint = parsed.room.currentSetpoint;
+							updateSingleRoom();
+							
 						}
 					});
 				},
@@ -122,8 +153,8 @@ function open_websocket() {
 			}
 		};
 		websocket.onclose = function (event) {
-			websocket_status.color = 'red';
-			websocket_status.status = 'Closed, Check console';
+			websocketStatus.color = 'red';
+			websocketStatus.status = 'Closed, Check console';
 			console.log("Closed with code: " + event.code + " " + event.reason);
 		};
 	}
@@ -143,7 +174,7 @@ function updateSingleRoom() {
 	if(typeof single_room.roomName != 'undefined' && single_room.roomName !== "") {
 		room_list.Rooms.forEach( function(roomItem) {
 			if (roomItem.Name === single_room.roomName) {
-				single_room.room = roomItem;
+				single_room.reassign(roomItem);
 			}
 		});
 	}
