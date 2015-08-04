@@ -1311,20 +1311,27 @@ std::string process_commands(std::string data, Json::Value& message) {
 			int nodepos = 0;
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				NodeInfo* nodeInfo = *it;
-				std::string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
-				if(nodeType == "Static PC Controller" || nodeType == "") {
-					continue;
-				}
 				
 				Json::Value node;
 				std::string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
 				if(nodeName.size() == 0) {
 					nodeName = "Undefined";
 				}
+				std::string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+				if(nodeType == "Static PC Controller" || nodeType == "") {
+					continue;
+				}
+				std::string manufacturerName = Manager::Get()->GetNodeManufacturerName(g_homeId, nodeInfo->m_nodeId);
+				std::string productName = Manager::Get()->GetNodeProductName(g_homeId, nodeInfo->m_nodeId);
+				std::string productId = Manager::Get()->GetNodeProductId(g_homeId, nodeInfo->m_nodeId);
+				
 				node["Name"] = nodeName;
 				node["ID"] = nodeInfo->m_nodeId;
 				node["Location"] = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
 				node["Type"] = nodeType;
+				node["Manufacturer"] = manufacturerName;
+				node["ProductName"] = productName;
+				node["ProductId"] = productId;
 				
 				for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
 					std::string tempstr="";
