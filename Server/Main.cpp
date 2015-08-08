@@ -999,7 +999,7 @@ int main(int argc, char* argv[]) {
 			return 0;
 		}
 		std::cout << "Starting TCP server on port: " << tcpport << endl;
-		string host = "localhost";
+		string host = "0.0.0.0";
 		using libsocket::inet_stream_server;
 		using libsocket::inet_stream;
 			
