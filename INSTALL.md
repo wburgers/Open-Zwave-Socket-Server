@@ -1,5 +1,5 @@
 ### Installation instructions:
-First, install dependencies for libwebsockets:
+First, install dependencies for libwebsockets, jsoncpp and libsocket:
 ```
 sudo apt-get install build-essential cmake libssl-dev zlib1g-dev
 ```
@@ -27,13 +27,29 @@ sudo make install
 cd
 ```
 
-After libwebsockets and jsoncpp are completely installed, it is time to build open-zwave and OZSS
+Finally, we are going to install [libsocket++](https://github.com/dermesser/libsocket)
+After the git clone, do:
+```
+cd libsocket
+cmake CMakeLists.txt
+make
+sudo make install
+cd
+```
+
+After libwebsockets, jsoncpp and libsocket++ are completely installed, it is time to build open-zwave and OZSSW.
 To compile open-zwave, you need libudev-dev, so:
 ```
 sudo apt-get install libudev-dev
 ```
-Then clone [open-zwave](https://github.com/OpenZWave/open-zwave).
-You can then clone this repo.
+Then clone [open-zwave](https://github.com/OpenZWave/open-zwave):
+```
+git clone https://github.com/OpenZWave/open-zwave.git
+```
+You can then clone this repo:
+```
+git clone https://github.com/wburgers/Open-Zwave-Socket-Server.git
+```
 Place the server folder of this repo in the open-zwave folder as open-zwave/cpp/examples/server, for example with a mount bind.
 ```
 mount --rbind /path/to/Open-Zwave-Socket-Server/Server /path/to/open-zwave/cpp/examples/server
@@ -63,4 +79,10 @@ Please note that the Scenes themselves should still be created. See the COMMANDL
 Scenes are saved automatically by open-zwave.
 
 Finally, if you want to run the Polymer Client (recommended), please run a bower update in the Polymer Client folder after installing node, npm and bower.
-Also make sure the Clients folder is hosted by your webserver of choice
+Also make sure the Clients folder is hosted by your webserver of choice.
+The Polymer Client makes use of the gapiwrapper.js file.
+Since Google does not really update their c++ api clients, I made a small wrapper in node to call google apis.
+To run this wrapper, simply run the following command in a new terminal (preferably in screen or something similar).
+```
+node gapiwrapper.js
+```
