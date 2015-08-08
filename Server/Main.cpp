@@ -53,15 +53,13 @@
 #include "ValueString.h"
 
 //External classes and libs
-#include "Socket.h"
-#include "SocketException.h"
 #include "ProtocolException.h"
 #include "sunrise.h"
 #include "Configuration.h"
 #include <libwebsockets.h>
 #include <json/json.h>
 #include <libsocket/unixclientstream.hpp>
-#include <libsocket/exception.hpp>
+#include <libsocket/inetserverstream.hpp>
 
 //Necessary includes for Main
 #include <time.h>
@@ -151,7 +149,6 @@ struct libwebsocket_context *context;
 #define SOCKET_COLLECTION_TIMEOUT 10
 
 static bool stopping = false;
-static Socket* server;
 static Configuration* conf;
 
 static uint32 g_homeId = 0;
@@ -243,6 +240,7 @@ void create_string_maps() {
 }
 
 //functions
+void sigint_handler(int sig);
 bool init_Rooms();
 bool init_Scenes();
 bool init_WakeupIntervalCache();
@@ -791,7 +789,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 		}
 		case LWS_CALLBACK_RECEIVE: {
 			// log what we recieved.
-			printf("received data: %s\n", (char*) in);
+			printf("Received websocket data: %s\n", (char*) in);
 			
 			std::string data = (char*) in;
 			Json::Value message;
@@ -806,9 +804,6 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			}
 			catch (std::exception const& e) {
 				std::cout << "Exception: " << e.what() << endl;
-			}
-			catch (SocketException& e) {
-				std::cout << "SocketException: " << e.what() << endl;
 			}
 			
 			if(data.compare(0,4,"AUTH") == 0 && message["auth"] == true) {
@@ -918,6 +913,12 @@ static struct libwebsocket_protocols protocols[] = {
 // Then create the socket server and the websocket server separately
 //-----------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
+	struct sigaction sigIntHandler;
+	sigIntHandler.sa_handler = sigint_handler;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
+	sigaction(SIGINT, &sigIntHandler, NULL);
+	
 	conf = new Configuration();
 	pthread_mutexattr_t mutexattr;
 
@@ -992,52 +993,39 @@ int main(int argc, char* argv[]) {
 			std::cout << "Websocket starting" << endl;
 		}
 		
-		int tcpport;
+		string tcpport;
 		if(!conf->GetTCPPort(tcpport)) {
 			std::cerr << "There is no TCP port set in Config.ini, please specify one and try again.\n";
 			return 0;
 		}
 		std::cout << "Starting TCP server on port: " << tcpport << endl;
+		string host = "localhost";
+		using libsocket::inet_stream_server;
+		using libsocket::inet_stream;
+			
+		inet_stream_server srv(host,tcpport,LIBSOCKET_IPv4);
 		
 		while(!stopping) {
-			try { // for all socket errors
-				server = new Socket();
-				if(!server->create()) {
-					throw SocketException ( "Could not create server socket." );
+			
+			inet_stream* client = srv.accept();
+			
+			pthread_t thread;
+			try {
+				if(pthread_create(&thread, NULL, run_socket, (void*) client) < 0) {
+					throw std::runtime_error("Unable to create thread");
 				}
-				if(!server->bind(tcpport)) {
-					throw SocketException ( "Could not bind to port." );
+				else {
+					std::cout << "Socket connection established" << endl;
 				}
-				if(!server->listen()) {
-					throw SocketException ( "Could not listen to socket." );
-				}
-				Socket new_sock;
-				while(server->accept(new_sock)) {
-					pthread_t thread;
-					int thread_sock2;
-					thread_sock2 = new_sock.GetSock();
-					if(pthread_create(&thread, NULL, run_socket, (void*) (intptr_t) thread_sock2) < 0) {
-						throw std::runtime_error("Unable to create thread");
-					}
-					else {
-						std::cout << "Socket connection established" << endl;
-					}
-				}
-			}
-			catch (SocketException& e) {
-				std::cout << "SocketException: " << e.what() << endl;
 			}
 			catch(...) {
 				std::cout << "Other exception" << endl;
 			}
-			std::cout << "Either server is stopping or an exception is caught" << endl;
-			std::cout << "If an exception is caught, resolve the issue and press ENTER to continue" << endl;
-			std::cin.ignore();
 		}
+		srv.destroy();
     }
 	
 	// program exit (clean up)
-	delete server;
 	delete conf;
 	Manager::Get()->WriteConfig(g_homeId);
 	std::cout << "Closing connection to Zwave Controller" << endl;
@@ -1053,6 +1041,14 @@ int main(int argc, char* argv[]) {
 	Options::Destroy();
 	pthread_mutex_destroy(&g_criticalSection);
 	return 0;
+}
+
+//-----------------------------------------------------------------------------
+// sigint_handler
+// Handles SIGINT program termination (CTRL+C)
+//-----------------------------------------------------------------------------
+void sigint_handler(int sig) {
+	stopping = true;
 }
 
 //-----------------------------------------------------------------------------
@@ -1225,36 +1221,46 @@ void *websockets_main(void* arg) {
 // This thread listens for commands on the socket connection
 //-----------------------------------------------------------------------------
 void *run_socket(void* arg) {
-	Socket thread_sock;
-	thread_sock.SetSock((intptr_t)arg);
-	while(true) {
+	using libsocket::inet_stream;
+	inet_stream* client;
+	client = (inet_stream*) arg;
+	
+	while(!stopping) {
 		try { // command parsing errors
 			//get commands from the socket
 			std::string data;
-			thread_sock >> data;
+			data.resize(1024);
+			*client >> data;
 			
-			if(data.empty()) { //client closed the connection
+			if(data.empty()) {
 				std::cout << "Socket client closed the connection" << endl;
+				client->destroy();
 				return 0;
 			}
+			std::cout << "Received socket data: " << data;
 			Json::Value message;
 			process_commands(data, message);
 			Json::FastWriter fastWriter;
-			thread_sock << fastWriter.write(message) + "\n";
+			string response = fastWriter.write(message) + "\n";
+			*client << response;
 		}
 		catch (ProtocolException& e) {
 			string what = "ProtocolException: ";
 			what += e.what();
 			what += "\n";
-			thread_sock << what;
+			*client << what;
+		}
+		catch (libsocket::socket_exception exc) {
+			std::cerr << exc.mesg << " errno code: " << exc.err;
 		}
 		catch (std::exception const& e) {
 			std::cout << "Exception: " << e.what() << endl;
 		}
-		catch (SocketException& e) {
-			std::cout << "SocketException: " << e.what() << endl;
-		}
 	}
+	std::cout << "Server is stopping, closing socket connection" << endl;
+	*client << "Server is stopping, closing socket connection";
+	client->destroy();
+	return 0;
 }
 
 //-----------------------------------------------------------------------------

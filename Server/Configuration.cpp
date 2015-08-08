@@ -22,10 +22,10 @@ T lexical_cast(const std::string& s) {
 }
 
 Configuration::Configuration() :	conf_ini_location("./cpp/examples/server/Config.ini"), 
-									tcp_port(0),
 									ws_port(0),
 									lat(0.0),
 									lon(0.0),
+									tcp_port(""),
 									morningScene(""),
 									dayScene(""),
 									nightScene(""),
@@ -88,7 +88,7 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 		switch(s_mapStringValues[name])
 		{
 			case tcp_port_n:
-				tcp_port = lexical_cast<int>(value);
+				tcp_port = value;
 				break;
 			case ws_port_n:
 				ws_port = lexical_cast<int>(value);
@@ -148,10 +148,7 @@ void Configuration::create_string_map() {
 	s_mapStringValues["google_client_secret"] = google_client_secret_n;
 }
 
-bool Configuration::GetTCPPort(int &port_) {
-	if(tcp_port == 0) {
-		return false;
-	}
+bool Configuration::GetTCPPort(std::string &port_) {
 	port_ = tcp_port;
 	return true;
 }
