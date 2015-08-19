@@ -1,8 +1,6 @@
 *.o
-test
 openzwave-server
-OZW_log.txt
-make_log.txt
+*/*.txt
 zw*.xml
 */*.ini
 settings.js
