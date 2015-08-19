@@ -42,15 +42,6 @@
 #include "Scene.h"
 #include "Group.h"
 #include "Notification.h"
-#include "ValueStore.h"
-#include "Value.h"
-#include "ValueBool.h"
-#include "ValueByte.h"
-#include "ValueDecimal.h"
-#include "ValueInt.h"
-#include "ValueList.h"
-#include "ValueShort.h"
-#include "ValueString.h"
 
 //External classes and libs
 #include "ProtocolException.h"
@@ -240,6 +231,7 @@ void create_string_maps() {
 }
 
 //functions
+void OnControllerUpdate(Driver::ControllerState cs);
 void sigint_handler(int sig);
 bool init_Rooms();
 bool init_Scenes();
@@ -410,7 +402,6 @@ void OnNotification(Notification const* _notification, void* _context) {
 					}
 				}
 				
-				//test for Wake-up Interval
 				if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Wake-up Interval") == 0) {
 					for(list<WakeupIntervalCacheItem>::iterator wiciit=WakeupIntervalCache.begin(); wiciit!=WakeupIntervalCache.end(); ++wiciit) {
 						if(nodeInfo->m_nodeId != wiciit->nodeId) {
@@ -430,7 +421,6 @@ void OnNotification(Notification const* _notification, void* _context) {
 					}
 				}
 				
-				//test for notifications
 				SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
 			}
 			break;
@@ -553,6 +543,13 @@ void OnNotification(Notification const* _notification, void* _context) {
 			}
 			break;
 		}
+		
+		case Notification::Type_ControllerCommand:
+		{
+			OnControllerUpdate((Driver::ControllerState)_notification->GetNotification());
+			break;
+		}
+		
 		case Notification::Type_Notification:
 			switch(_notification->GetNotification()) {
 				case Notification::Code_Awake: {
@@ -575,185 +572,59 @@ void OnNotification(Notification const* _notification, void* _context) {
 	pthread_mutex_unlock(&g_criticalSection);
 }
 
-void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err, void *ct ) {
-	//m_structCtrl *ctrl = (m_structCtrl *)ct;
-
-	// Possible ControllerState values:
-	// ControllerState_Normal     - No command in progress.
-	// ControllerState_Starting   - The command is starting.
-	// ControllerState_Cancel     - The command was cancelled.
-	// ControllerState_Error      - Command invocation had error(s) and was aborted.
-	// ControllerState_Sleeping   - Controller command is on a sleep queue wait for device.
-	// ControllerState_Waiting    - Controller is waiting for a user action.
-	// ControllerState_InProgress - The controller is communicating with the other device to carry out the command.
-	// ControllerState_Completed  - The command has completed successfully.
-	// ControllerState_Failed     - The command has failed.
-	// ControllerState_NodeOK     - Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node is OK.
-	// ControllerState_NodeFailed - Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node has failed.
-
-	pthread_mutex_lock( &g_criticalSection );
-
+void OnControllerUpdate(Driver::ControllerState cs) {
 	switch (cs) {
 		case Driver::ControllerState_Normal:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Normal - no command in progress", ctrl->m_homeId );
-			std::cout << "ControllerState: Normal" << endl;
-			//ctrl->m_controllerBusy = false;
+			std::cout << "ControllerState: Normal - No command in progress." << endl;
 			break;
 		}
 		case Driver::ControllerState_Starting:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Starting - the command is starting", ctrl->m_homeId );
-			std::cout << "ControllerState: Starting" << endl;
+			std::cout << "ControllerState: Starting - The command is starting." << endl;
 			break;
 		}
 		case Driver::ControllerState_Cancel:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Cancel - the command was cancelled", ctrl->m_homeId );
-			std::cout << "ControllerState: Cancel" << endl;
+			std::cout << "ControllerState: Cancel - The command was cancelled." << endl;
 			break;
 		}
 		case Driver::ControllerState_Error:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Error - command invocation had error(s) and was aborted", ctrl->m_homeId );
-			std::cout << "ControllerState: Error" << endl;
+			std::cout << "ControllerState: Error - Command invocation had error(s) and was aborted." << endl;
 			break;
 		}
 		case Driver::ControllerState_Sleeping:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Sleeping - controller command is on a sleep queue wait for device", ctrl->m_homeId );
-			std::cout << "ControllerState: Sleeping" << endl;
+			std::cout << "ControllerState: Sleeping - Controller command is on a sleep queue wait for device." << endl;
 			break;
 		}
 		case Driver::ControllerState_Waiting:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Waiting - waiting for a user action", ctrl->m_homeId );
-			std::cout << "ControllerState: Waiting" << endl;
+			std::cout << "ControllerState: Waiting - Controller is waiting for a user action." << endl;
 			break;
 		}
 		case Driver::ControllerState_InProgress:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - InProgress - communicating with the other device", ctrl->m_homeId );
-			std::cout << "ControllerState: InProgress" << endl;
+			std::cout << "ControllerState: InProgress - The controller is communicating with the other device to carry out the command." << endl;
 			break;
 		}
 		case Driver::ControllerState_Completed:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Completed - command has completed successfully", ctrl->m_homeId );
-			std::cout << "ControllerState: Completed" << endl;
-			//ctrl->m_controllerBusy = false;
+			std::cout << "ControllerState: Completed - The command has completed successfully." << endl;
 			break;
 		}
 		case Driver::ControllerState_Failed:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Failed - command has failed", ctrl->m_homeId );
-			std::cout << "ControllerState: Failed" << endl;
-			//ctrl->m_controllerBusy = false;
-			break;
-		}
-		case Driver::ControllerState_NodeOK:
-		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - NodeOK - the node is OK", ctrl->m_homeId );
-			std::cout << "ControllerState: NodeOk" << endl;
-			//ctrl->m_controllerBusy = false;
-
-			// Store Node State
-
-			break;
-		}
-		case Driver::ControllerState_NodeFailed:
-		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - NodeFailed - the node has failed", ctrl->m_homeId );
-			std::cout << "ControllerState: NodeFailed" << endl;
-			//ctrl->m_controllerBusy = false;
-
-			// Store Node State
-
+			std::cout << "ControllerState: Failed - The command has failed." << endl;
 			break;
 		}
 		default:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - unknown response", ctrl->m_homeId );
 			std::cout << "ControllerState: Unknown" << endl;
-			//ctrl->m_controllerBusy = false;
 			break;
 		}
 	}
-
-	// Additional possible error information
-	switch (err) {
-		case Driver::ControllerError_None:
-		{
-			break;
-		}
-		case Driver::ControllerError_ButtonNotFound:
-		{
-			std::cout << "ControllerError: Button Not Found" << endl;
-			break;
-		}
-		case Driver::ControllerError_NodeNotFound:
-		{
-			std::cout << "ControllerError: Node Not Found" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotBridge:
-		{
-			std::cout << "ControllerError: Not a Bridge" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotPrimary:
-		{
-			std::cout << "ControllerError: Not Primary Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_IsPrimary:
-		{
-			std::cout << "ControllerError: Is Primary Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotSUC:
-		{
-			std::cout << "ControllerError: Not Static Update Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotSecondary:
-		{
-			std::cout << "ControllerError: Not Secondary Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotFound:
-		{
-			std::cout << "ControllerError: Not Found" << endl;
-			break;
-		}
-		case Driver::ControllerError_Busy:
-		{
-			std::cout << "ControllerError: Busy" << endl;
-			break;
-		}
-		case Driver::ControllerError_Failed:
-		{
-			std::cout << "ControllerError: Failed" << endl;
-			break;
-		}
-		case Driver::ControllerError_Disabled:
-		{
-			std::cout << "ControllerError: Disabled" << endl;
-			break;
-		}
-		case Driver::ControllerError_Overflow:
-		{
-			std::cout << "ControllerError: Overflow" << endl;
-			break;
-		}
-		default:
-		{
-			std::cout << "ControllerError: Unknown error" << endl;
-			break;
-		}
-	}
-
-	pthread_mutex_unlock( &g_criticalSection );
 }
 
 //-----------------------------------------------------------------------------
@@ -933,8 +804,7 @@ int main(int argc, char* argv[]) {
 	// The first argument is the path to the config files (where the manufacturer_specific.xml file is located
 	// The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
 	// the log file will appear in the program's working directory.
-	//Options::Create("../../../../config/", "", "");
-	Options::Create("./config/", "", "");
+	Options::Create("/usr/local/etc/openzwave/", "", "");
 	Options::Get()->AddOptionInt("RetryTimeout", 5000);
 	Options::Get()->Lock();
 
@@ -1655,7 +1525,10 @@ std::string process_commands(std::string data, Json::Value& message) {
 			switch(s_mapStringCommands[trim(v[1])])
 			{
 				case Add: {
-					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate)) {
+					if(v.size() != 3) {
+						throw ProtocolException(2, "Wrong number of arguments");
+					}
+					if(Manager::Get()->AddNode(g_homeId, lexical_cast<bool>(v[2]))) {
 						message["text"] = "Controller is now in inclusion mode, see the server console for more information";
 					} else {
 						message["error"]["err_main"] = "Controller could not be set to inclusion mode, see the server console for more information";
@@ -1663,7 +1536,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 					break;
 				}
 				case Remove: {
-					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_RemoveDevice, OnControllerUpdate)) {
+					if(Manager::Get()->RemoveNode(g_homeId)) {
 						message["text"] = "Controller is now in exclusion mode, see the server console for more information";
 					} else {
 						message["error"]["err_main"] = "Controller could not be set to exclusion mode, see the server console for more information";
