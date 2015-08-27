@@ -45,7 +45,7 @@
 
 //External classes and libs
 #include "ProtocolException.h"
-#include "sunrise.h"
+#include "Sunrise.h"
 #include "Configuration.h"
 #include <libwebsockets.h>
 #include <json/json.h>

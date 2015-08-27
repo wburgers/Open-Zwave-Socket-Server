@@ -1,7 +1,7 @@
 // ProtocolException class
 
-#ifndef ProtocolException_class
-#define ProtocolException_class
+#ifndef OZWSS_PROTOCOLEXCEPTION_H_
+#define OZWSS_PROTOCOLEXCEPTION_H_
 
 #include <string>
 #include <sstream>
@@ -28,4 +28,4 @@ class ProtocolException
 
 };
 
-#endif
+#endif // OZWSS_PROTOCOLEXCEPTION_H_

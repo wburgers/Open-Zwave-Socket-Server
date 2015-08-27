@@ -1,3 +1,6 @@
+#ifndef OZWSS_PROTOCOLEXCEPTION_H_
+#define OZWSS_PROTOCOLEXCEPTION_H_
+
 #include <string>
 #include <iostream>
 #include <fstream>
@@ -25,3 +28,5 @@ class Configuration {
 		bool GetCertificateInfo(std::string &certificate_, std::string &certificate_key_);
 		bool GetGoogleClientIdAndSecret(std::string &client_id_, std::string &client_secret_);
 };
+
+#endif // OZWSS_PROTOCOLEXCEPTION_H_

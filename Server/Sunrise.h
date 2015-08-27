@@ -1,6 +1,6 @@
-#ifndef sunrise_h
-#define sunrise_h
+#ifndef OZWSS_SUNRISE_H_
+#define OZWSS_SUNRISE_H_
 
 bool GetSunriseSunset(time_t &tSunrise,time_t &tSunset,float latitude,float longitude);
 
-#endif
+#endif // OZWSS_SUNRISE_H_
