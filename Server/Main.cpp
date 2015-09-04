@@ -32,9 +32,30 @@
 // Other modifications completed by conradvassallo.com, then thomasloughlin.com
 // This version is by willemburgers.nl
 
-//Open-Zwave includes:
+#include "Main.h"
+
+//C/C++ system includes:
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
+#include <cstring>
+#include <string>
+#include <sstream>
+#include <stdio.h>
+#include <iostream>
+#include <vector>
+#include <stdlib.h>
+#include <stdexcept>
+#include <signal.h>
+
+//External classes and libs
+#include <libwebsockets.h>
+#include <json/json.h>
+#include <libsocket/unixclientstream.hpp>
+#include <libsocket/inetclientstream.hpp>
+#include <libsocket/inetserverstream.hpp>
+
+//Open-Zwave includes:
 #include "Options.h"
 #include "Manager.h"
 #include "Driver.h"
@@ -43,28 +64,11 @@
 #include "Group.h"
 #include "Notification.h"
 
-//External classes and libs
-#include "ProtocolException.h"
+//Project includes
 #include "Sunrise.h"
 #include "Configuration.h"
-#include <libwebsockets.h>
-#include <json/json.h>
-#include <libsocket/unixclientstream.hpp>
-#include <libsocket/inetserverstream.hpp>
+#include "ProtocolException.h"
 
-//Necessary includes for Main
-#include <time.h>
-#include <string>
-#include <string.h>
-#include <iostream>
-#include <stdio.h>
-#include <vector>
-#include <stdlib.h>
-#include <sstream>
-#include <stdexcept>
-#include <signal.h>
-
-#include "Main.h"
 using namespace OpenZWave;
 
 //-----------------------------------------------------------------------------
@@ -669,7 +673,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 				if(pss->authenticated || data.compare(0,4,"AUTH") == 0)
 					process_commands(data, message);
 			}
-			catch (ProtocolException& e) {
+			catch (OZWSS::ProtocolException& e) {
 				message["error"]["err_main"] = "ProtocolException";
 				message["error"]["err_message"] = e.what();
 			}
@@ -1114,7 +1118,7 @@ void *run_socket(void* arg) {
 			string response = fastWriter.write(message) + "\n";
 			*client << response;
 		}
-		catch (ProtocolException& e) {
+		catch (OZWSS::ProtocolException& e) {
 			string what = "ProtocolException: ";
 			what += e.what();
 			what += "\n";
@@ -1235,7 +1239,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case SetNode:
 		{
 			if(v.size() != 3) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			int Node = 0;
 			string Options = "";
@@ -1290,7 +1294,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case RoomC:
 		{
 			if(v.size() != 3) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			std::string location = trim(v[2]);
 			for(list<Room>::iterator rit=roomList.begin(); rit!=roomList.end(); ++rit) {
@@ -1309,7 +1313,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 						rit->changed = true;
 						break;
 					default:
-						throw ProtocolException(1, "Unknown Room command");
+						throw OZWSS::ProtocolException("Unknown Room command", 1);
 						break;
 				}
 				stringstream setpoint, currentTemp;
@@ -1342,7 +1346,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case SceneC:
 		{
 			if(v.size() < 3) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			switch(s_mapStringCommands[trim(v[1])])
 			{
@@ -1368,13 +1372,13 @@ std::string process_commands(std::string data, Json::Value& message) {
 				case Add:
 				{
 					if(v.size() != 5) {
-						throw ProtocolException(2, "Wrong number of arguments");
+						throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 					}
 					uint8 numscenes = 0;
 					uint8 *sceneIds = new uint8[numscenes];
 					
 					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-						throw ProtocolException(3, "No scenes created");
+						throw OZWSS::ProtocolException("No scenes created", 3);
 					}
 					
 					string sclabel = trim(v[2]);
@@ -1463,13 +1467,13 @@ std::string process_commands(std::string data, Json::Value& message) {
 				case Remove:
 				{
 					if(v.size() != 4) {
-						throw ProtocolException(2, "Wrong number of arguments");
+						throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 					}
 					uint8 numscenes = 0;
 					uint8 *sceneIds = new uint8[numscenes];
 					
 					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-						throw ProtocolException(3, "No scenes created");
+						throw OZWSS::ProtocolException("No scenes created", 3);
 					}
 					
 					string sclabel = trim(v[2]);
@@ -1515,7 +1519,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 					break;
 				}
 				default:
-					throw ProtocolException(1, "Unknown Scene command");
+					throw OZWSS::ProtocolException("Unknown Scene command", 1);
 					break;
 			}
 			break;
@@ -1526,7 +1530,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 			{
 				case Add: {
 					if(v.size() != 3) {
-						throw ProtocolException(2, "Wrong number of arguments");
+						throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 					}
 					if(Manager::Get()->AddNode(g_homeId, lexical_cast<bool>(v[2]))) {
 						message["text"] = "Controller is now in inclusion mode, see the server console for more information";
@@ -1568,7 +1572,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 			time_t sunrise = 0, sunset = 0;
 			float lat, lon;
 			conf->GetLocation(lat, lon);
-			if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
+			if(OZWSS::GetSunriseSunset(sunrise,sunset,lat,lon)) {
 				SetAlarm("Sunrise", sunrise, false);
 				SetAlarm("Sunset", sunset, false);
 			}
@@ -1659,7 +1663,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case PollInterval:
 		{
 			if(v.size() != 2) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			int interval = lexical_cast<int>(v[1]); //get the interval in minutes
 			Manager::Get()->SetPollInterval(1000*60*interval, false);
@@ -1683,7 +1687,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 			stopping = true;
 			break;
 		default:
-			throw ProtocolException(1, "Unknown command");
+			throw OZWSS::ProtocolException("Unknown command", 1);
 			break;
 	}
 	return output;
@@ -1902,7 +1906,7 @@ std::string activateScene(std::string sclabel) {
 	sclabel = trim(sclabel);
 	
 	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-		throw ProtocolException(3, "No scenes created");
+		throw OZWSS::ProtocolException("No scenes created", 3);
 	}
 	
 	int scid=0;
@@ -1917,7 +1921,7 @@ std::string activateScene(std::string sclabel) {
 		return "Activate scene "+sclabel;
 	}
 	delete sceneIds;
-	throw ProtocolException(4, "Scene not found");
+	throw OZWSS::ProtocolException("Scene not found", 4);
 }
 
 //-----------------------------------------------------------------------------
@@ -1933,7 +1937,7 @@ std::string switchAtHome() {
 		output += "Could not get the location from Config.ini\n";
 		return output;
 	}
-	if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
+	if(OZWSS::GetSunriseSunset(sunrise,sunset,lat,lon)) {
 		atHome = !atHome;
 		if(atHome) {
 			output += "Welcome home\n";
@@ -1945,7 +1949,7 @@ std::string switchAtHome() {
 				try {
 					output += activateScene(dayScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					std::string what = "ProtocolException: ";
 					what += e.what();
 					output += what + "\n";
@@ -1959,7 +1963,7 @@ std::string switchAtHome() {
 				try {
 					output += activateScene(nightScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					std::string what = "ProtocolException: ";
 					what += e.what();
 					output += what + "\n";
@@ -1974,7 +1978,7 @@ std::string switchAtHome() {
 			try {
 				output += activateScene(awayScene);
 			}
-			catch (ProtocolException& e) {
+			catch (OZWSS::ProtocolException& e) {
 				string what = "ProtocolException: ";
 				what += e.what();
 				output += what + "\n";
@@ -2056,7 +2060,7 @@ void sigalrm_handler(int sig) {
 				try {
 					std::cout << activateScene(morningScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					string what = "ProtocolException: ";
 					what += e.what();
 					std::cout << what << endl;
@@ -2073,7 +2077,7 @@ void sigalrm_handler(int sig) {
 				try {
 					std::cout << activateScene(nightScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					string what = "ProtocolException: ";
 					what += e.what();
 					std::cout << what << endl;

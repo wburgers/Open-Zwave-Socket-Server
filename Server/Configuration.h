@@ -1,10 +1,7 @@
-#ifndef OZWSS_PROTOCOLEXCEPTION_H_
-#define OZWSS_PROTOCOLEXCEPTION_H_
+#ifndef OZWSS_CONFIGURATION_H_
+#define OZWSS_CONFIGURATION_H_
 
 #include <string>
-#include <iostream>
-#include <fstream>
-#include <stdexcept>
 
 class Configuration {
 	private:
@@ -29,4 +26,4 @@ class Configuration {
 		bool GetGoogleClientIdAndSecret(std::string &client_id_, std::string &client_secret_);
 };
 
-#endif // OZWSS_PROTOCOLEXCEPTION_H_
+#endif // OZWSS_CONFIGURATION_H_
