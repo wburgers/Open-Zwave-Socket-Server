@@ -30,7 +30,7 @@ INCLUDES	:= -I /usr/local/include/openzwave -I /usr/local/include/openzwave/valu
 all: openzwave-server
 
 Sunrise:
-	$(LD) -c -Wall Sunrise.cpp -o Sunrise.o -lm
+	$(LD) $(CFLAGS) Sunrise.cpp -o Sunrise.o -lm
 	
 Configuration:
 	$(LD) $(CFLAGS) Configuration.cpp -o Configuration.o

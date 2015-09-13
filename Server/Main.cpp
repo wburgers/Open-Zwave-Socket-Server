@@ -144,7 +144,7 @@ struct libwebsocket_context *context;
 #define SOCKET_COLLECTION_TIMEOUT 10
 
 static bool stopping = false;
-static Configuration* conf;
+static OZWSS::Configuration* conf;
 
 static uint32 g_homeId = 0;
 static bool g_initFailed = false;
@@ -794,7 +794,7 @@ int main(int argc, char* argv[]) {
 	sigIntHandler.sa_flags = 0;
 	sigaction(SIGINT, &sigIntHandler, NULL);
 	
-	conf = new Configuration();
+	conf = new OZWSS::Configuration();
 	pthread_mutexattr_t mutexattr;
 
 	pthread_mutexattr_init(&mutexattr);

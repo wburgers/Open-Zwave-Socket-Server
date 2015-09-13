@@ -24,6 +24,6 @@ namespace OZWSS {
 		private:
 			int m_code;
 	};
-}
+} // namespace
 
 #endif // OZWSS_PROTOCOLEXCEPTION_H_
