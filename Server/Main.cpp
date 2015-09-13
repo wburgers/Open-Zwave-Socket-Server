@@ -235,7 +235,7 @@ void create_string_maps() {
 }
 
 //functions
-void OnControllerUpdate(Driver::ControllerState cs);
+void OnControllerUpdate(uint8 cs);
 void sigint_handler(int sig);
 bool init_Rooms();
 bool init_Scenes();
@@ -550,7 +550,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 		
 		case Notification::Type_ControllerCommand:
 		{
-			OnControllerUpdate((Driver::ControllerState)_notification->GetNotification());
+			OnControllerUpdate(_notification->GetEvent());
 			break;
 		}
 		
@@ -576,7 +576,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 	pthread_mutex_unlock(&g_criticalSection);
 }
 
-void OnControllerUpdate(Driver::ControllerState cs) {
+void OnControllerUpdate(uint8 cs) {
 	switch (cs) {
 		case Driver::ControllerState_Normal:
 		{
