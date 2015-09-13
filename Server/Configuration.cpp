@@ -1,4 +1,5 @@
 #include "Configuration.h"
+
 #include <string>
 #include <iostream>
 #include <fstream>
@@ -6,7 +7,7 @@
 #include <sstream>
 #include <map>
 
-enum contents {Undefined = 0, tcp_port_n, ws_port_n, lat_n, lon_n, morningScene_n, dayScene_n, nightScene_n, awayScene_n, certificate_n, certificate_key_n};
+enum contents {Undefined = 0, tcp_port_n, ws_port_n, lat_n, lon_n, morningScene_n, dayScene_n, nightScene_n, awayScene_n, certificate_n, certificate_key_n, google_client_id_n, google_client_secret_n};
 static std::map<std::string, contents> s_mapStringValues;
 
 template <typename T>
@@ -21,17 +22,19 @@ T lexical_cast(const std::string& s) {
 	return result;
 }
 
-Configuration::Configuration() :	conf_ini_location("./cpp/examples/server/Config.ini"), 
-									tcp_port(0),
+Configuration::Configuration() :	conf_ini_location("./Config.ini"), 
 									ws_port(0),
 									lat(0.0),
 									lon(0.0),
+									tcp_port(""),
 									morningScene(""),
 									dayScene(""),
 									nightScene(""),
 									awayScene(""),
 									certificate(""),
-									certificate_key("") {
+									certificate_key(""),
+									google_client_id(""),
+									google_client_secret("") {
 	create_string_map();
 	std::ifstream conffile;
 	if(open_filestream(conffile))
@@ -86,7 +89,7 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 		switch(s_mapStringValues[name])
 		{
 			case tcp_port_n:
-				tcp_port = lexical_cast<int>(value);
+				tcp_port = value;
 				break;
 			case ws_port_n:
 				ws_port = lexical_cast<int>(value);
@@ -115,6 +118,11 @@ bool Configuration::parse_variable(std::string name, std::string value) {
 			case certificate_key_n:
 				certificate_key = value;
 				break;
+			case google_client_id_n:
+				google_client_id = value;
+				break;
+			case google_client_secret_n:
+				google_client_secret = value;
 			default:
 				return false;
 				break;
@@ -137,12 +145,11 @@ void Configuration::create_string_map() {
 	s_mapStringValues["awayScene"] = awayScene_n;
 	s_mapStringValues["certificate"] = certificate_n;
 	s_mapStringValues["certificate_key"] = certificate_key_n;
+	s_mapStringValues["google_client_id"] = google_client_id_n;
+	s_mapStringValues["google_client_secret"] = google_client_secret_n;
 }
 
-bool Configuration::GetTCPPort(int &port_) {
-	if(tcp_port == 0) {
-		return false;
-	}
+bool Configuration::GetTCPPort(std::string &port_) {
 	port_ = tcp_port;
 	return true;
 }
@@ -184,5 +191,10 @@ bool Configuration::GetAwayScene(std::string &awayScene_) {
 bool Configuration::GetCertificateInfo(std::string &certificate_, std::string &certificate_key_) {
 	certificate_ = certificate;
 	certificate_key_ = certificate_key;
+	return true;
+}
+bool Configuration::GetGoogleClientIdAndSecret(std::string &client_id_, std::string &client_secret_) {
+	client_id_ = google_client_id;
+	client_secret_ = google_client_secret;
 	return true;
 }

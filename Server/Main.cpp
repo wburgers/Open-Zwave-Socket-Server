@@ -32,9 +32,30 @@
 // Other modifications completed by conradvassallo.com, then thomasloughlin.com
 // This version is by willemburgers.nl
 
-//Open-Zwave includes:
+#include "Main.h"
+
+//C/C++ system includes:
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
+#include <cstring>
+#include <string>
+#include <sstream>
+#include <stdio.h>
+#include <iostream>
+#include <vector>
+#include <stdlib.h>
+#include <stdexcept>
+#include <signal.h>
+
+//External classes and libs
+#include <libwebsockets.h>
+#include <json/json.h>
+#include <libsocket/unixclientstream.hpp>
+#include <libsocket/inetclientstream.hpp>
+#include <libsocket/inetserverstream.hpp>
+
+//Open-Zwave includes:
 #include "Options.h"
 #include "Manager.h"
 #include "Driver.h"
@@ -42,37 +63,12 @@
 #include "Scene.h"
 #include "Group.h"
 #include "Notification.h"
-#include "ValueStore.h"
-#include "Value.h"
-#include "ValueBool.h"
-#include "ValueByte.h"
-#include "ValueDecimal.h"
-#include "ValueInt.h"
-#include "ValueList.h"
-#include "ValueShort.h"
-#include "ValueString.h"
 
-//External classes and libs
-#include "Socket.h"
-#include "SocketException.h"
-#include "ProtocolException.h"
-#include "sunrise.h"
+//Project includes
+#include "Sunrise.h"
 #include "Configuration.h"
-#include <libwebsockets.h>
-#include <json/json.h>
+#include "ProtocolException.h"
 
-//Necessary includes for Main
-#include <time.h>
-#include <string>
-#include <iostream>
-#include <stdio.h>
-#include <vector>
-#include <stdlib.h>
-#include <sstream>
-#include <stdexcept>
-#include <signal.h>
-
-#include "Main.h"
 using namespace OpenZWave;
 
 //-----------------------------------------------------------------------------
@@ -148,7 +144,6 @@ struct libwebsocket_context *context;
 #define SOCKET_COLLECTION_TIMEOUT 10
 
 static bool stopping = false;
-static Socket* server;
 static Configuration* conf;
 
 static uint32 g_homeId = 0;
@@ -240,6 +235,8 @@ void create_string_maps() {
 }
 
 //functions
+void OnControllerUpdate(uint8 cs);
+void sigint_handler(int sig);
 bool init_Rooms();
 bool init_Scenes();
 bool init_WakeupIntervalCache();
@@ -382,10 +379,10 @@ void OnNotification(Notification const* _notification, void* _context) {
 									if(strcmp(Manager::Get()->GetNodeType(g_homeId, (*nit)->m_nodeId).c_str(), "Setpoint Thermostat") !=0) {
 										continue;
 									}
-									stringstream ssCurrentTemp;
-									ssCurrentTemp << rit->setpoint;
+									stringstream ssCurrentSetpoint;
+									ssCurrentSetpoint << rit->setpoint;
 									string err_message = "";
-									if(!SetValue(g_homeId, (*nit)->m_nodeId, ssCurrentTemp.str(), COMMAND_CLASS_THERMOSTAT_SETPOINT, "Heating 1", err_message)) {
+									if(!SetValue(g_homeId, (*nit)->m_nodeId, ssCurrentSetpoint.str(), COMMAND_CLASS_THERMOSTAT_SETPOINT, "Heating 1", err_message)) {
 										std::cout << err_message;
 									}
 								}
@@ -409,7 +406,6 @@ void OnNotification(Notification const* _notification, void* _context) {
 					}
 				}
 				
-				//test for Wake-up Interval
 				if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Wake-up Interval") == 0) {
 					for(list<WakeupIntervalCacheItem>::iterator wiciit=WakeupIntervalCache.begin(); wiciit!=WakeupIntervalCache.end(); ++wiciit) {
 						if(nodeInfo->m_nodeId != wiciit->nodeId) {
@@ -429,7 +425,6 @@ void OnNotification(Notification const* _notification, void* _context) {
 					}
 				}
 				
-				//test for notifications
 				SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
 			}
 			break;
@@ -552,6 +547,13 @@ void OnNotification(Notification const* _notification, void* _context) {
 			}
 			break;
 		}
+		
+		case Notification::Type_ControllerCommand:
+		{
+			OnControllerUpdate(_notification->GetEvent());
+			break;
+		}
+		
 		case Notification::Type_Notification:
 			switch(_notification->GetNotification()) {
 				case Notification::Code_Awake: {
@@ -574,185 +576,59 @@ void OnNotification(Notification const* _notification, void* _context) {
 	pthread_mutex_unlock(&g_criticalSection);
 }
 
-void OnControllerUpdate( Driver::ControllerState cs, Driver::ControllerError err, void *ct ) {
-	//m_structCtrl *ctrl = (m_structCtrl *)ct;
-
-	// Possible ControllerState values:
-	// ControllerState_Normal     - No command in progress.
-	// ControllerState_Starting   - The command is starting.
-	// ControllerState_Cancel     - The command was cancelled.
-	// ControllerState_Error      - Command invocation had error(s) and was aborted.
-	// ControllerState_Sleeping   - Controller command is on a sleep queue wait for device.
-	// ControllerState_Waiting    - Controller is waiting for a user action.
-	// ControllerState_InProgress - The controller is communicating with the other device to carry out the command.
-	// ControllerState_Completed  - The command has completed successfully.
-	// ControllerState_Failed     - The command has failed.
-	// ControllerState_NodeOK     - Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node is OK.
-	// ControllerState_NodeFailed - Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node has failed.
-
-	pthread_mutex_lock( &g_criticalSection );
-
+void OnControllerUpdate(uint8 cs) {
 	switch (cs) {
 		case Driver::ControllerState_Normal:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Normal - no command in progress", ctrl->m_homeId );
-			std::cout << "ControllerState: Normal" << endl;
-			//ctrl->m_controllerBusy = false;
+			std::cout << "ControllerState: Normal - No command in progress." << endl;
 			break;
 		}
 		case Driver::ControllerState_Starting:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Starting - the command is starting", ctrl->m_homeId );
-			std::cout << "ControllerState: Starting" << endl;
+			std::cout << "ControllerState: Starting - The command is starting." << endl;
 			break;
 		}
 		case Driver::ControllerState_Cancel:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Cancel - the command was cancelled", ctrl->m_homeId );
-			std::cout << "ControllerState: Cancel" << endl;
+			std::cout << "ControllerState: Cancel - The command was cancelled." << endl;
 			break;
 		}
 		case Driver::ControllerState_Error:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Error - command invocation had error(s) and was aborted", ctrl->m_homeId );
-			std::cout << "ControllerState: Error" << endl;
+			std::cout << "ControllerState: Error - Command invocation had error(s) and was aborted." << endl;
 			break;
 		}
 		case Driver::ControllerState_Sleeping:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Sleeping - controller command is on a sleep queue wait for device", ctrl->m_homeId );
-			std::cout << "ControllerState: Sleeping" << endl;
+			std::cout << "ControllerState: Sleeping - Controller command is on a sleep queue wait for device." << endl;
 			break;
 		}
 		case Driver::ControllerState_Waiting:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Waiting - waiting for a user action", ctrl->m_homeId );
-			std::cout << "ControllerState: Waiting" << endl;
+			std::cout << "ControllerState: Waiting - Controller is waiting for a user action." << endl;
 			break;
 		}
 		case Driver::ControllerState_InProgress:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - InProgress - communicating with the other device", ctrl->m_homeId );
-			std::cout << "ControllerState: InProgress" << endl;
+			std::cout << "ControllerState: InProgress - The controller is communicating with the other device to carry out the command." << endl;
 			break;
 		}
 		case Driver::ControllerState_Completed:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Completed - command has completed successfully", ctrl->m_homeId );
-			std::cout << "ControllerState: Completed" << endl;
-			//ctrl->m_controllerBusy = false;
+			std::cout << "ControllerState: Completed - The command has completed successfully." << endl;
 			break;
 		}
 		case Driver::ControllerState_Failed:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - Failed - command has failed", ctrl->m_homeId );
-			std::cout << "ControllerState: Failed" << endl;
-			//ctrl->m_controllerBusy = false;
-			break;
-		}
-		case Driver::ControllerState_NodeOK:
-		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - NodeOK - the node is OK", ctrl->m_homeId );
-			std::cout << "ControllerState: NodeOk" << endl;
-			//ctrl->m_controllerBusy = false;
-
-			// Store Node State
-
-			break;
-		}
-		case Driver::ControllerState_NodeFailed:
-		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - NodeFailed - the node has failed", ctrl->m_homeId );
-			std::cout << "ControllerState: NodeFailed" << endl;
-			//ctrl->m_controllerBusy = false;
-
-			// Store Node State
-
+			std::cout << "ControllerState: Failed - The command has failed." << endl;
 			break;
 		}
 		default:
 		{
-			//WriteLog( LogLevel_Debug, true, "ControllerState Event: HomeId=%d - unknown response", ctrl->m_homeId );
 			std::cout << "ControllerState: Unknown" << endl;
-			//ctrl->m_controllerBusy = false;
 			break;
 		}
 	}
-
-	// Additional possible error information
-	switch (err) {
-		case Driver::ControllerError_None:
-		{
-			break;
-		}
-		case Driver::ControllerError_ButtonNotFound:
-		{
-			std::cout << "ControllerError: Button Not Found" << endl;
-			break;
-		}
-		case Driver::ControllerError_NodeNotFound:
-		{
-			std::cout << "ControllerError: Node Not Found" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotBridge:
-		{
-			std::cout << "ControllerError: Not a Bridge" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotPrimary:
-		{
-			std::cout << "ControllerError: Not Primary Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_IsPrimary:
-		{
-			std::cout << "ControllerError: Is Primary Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotSUC:
-		{
-			std::cout << "ControllerError: Not Static Update Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotSecondary:
-		{
-			std::cout << "ControllerError: Not Secondary Controller" << endl;
-			break;
-		}
-		case Driver::ControllerError_NotFound:
-		{
-			std::cout << "ControllerError: Not Found" << endl;
-			break;
-		}
-		case Driver::ControllerError_Busy:
-		{
-			std::cout << "ControllerError: Busy" << endl;
-			break;
-		}
-		case Driver::ControllerError_Failed:
-		{
-			std::cout << "ControllerError: Failed" << endl;
-			break;
-		}
-		case Driver::ControllerError_Disabled:
-		{
-			std::cout << "ControllerError: Disabled" << endl;
-			break;
-		}
-		case Driver::ControllerError_Overflow:
-		{
-			std::cout << "ControllerError: Overflow" << endl;
-			break;
-		}
-		default:
-		{
-			std::cout << "ControllerError: Unknown error" << endl;
-			break;
-		}
-	}
-
-	pthread_mutex_unlock( &g_criticalSection );
 }
 
 //-----------------------------------------------------------------------------
@@ -768,6 +644,7 @@ static int httpCallback(struct libwebsocket_context *context,
 
 struct per_session_data__open_zwave {
 	int ringbuffer_tail;
+	bool authenticated;
 };
 
 static int open_zwaveCallback(	struct libwebsocket_context *context,
@@ -781,28 +658,31 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 	switch(reason) {
 		case LWS_CALLBACK_ESTABLISHED: {
 			pss->ringbuffer_tail = ringbuffer_head;
+			pss->authenticated = false;
 			std::cout << "WebSocket connection established" << endl;
 			break;
 		}
 		case LWS_CALLBACK_RECEIVE: {
 			// log what we recieved.
-			printf("received data: %s\n", (char*) in);
+			printf("Received websocket data: %s\n", (char*) in);
 			
-			std::string command = (char*) in;
+			std::string data = (char*) in;
 			Json::Value message;
 			
 			try {
-				process_commands(command, message);
+				if(pss->authenticated || data.compare(0,4,"AUTH") == 0)
+					process_commands(data, message);
 			}
-			catch (ProtocolException& e) {
+			catch (OZWSS::ProtocolException& e) {
 				message["error"]["err_main"] = "ProtocolException";
 				message["error"]["err_message"] = e.what();
 			}
 			catch (std::exception const& e) {
 				std::cout << "Exception: " << e.what() << endl;
 			}
-			catch (SocketException& e) {
-				std::cout << "SocketException: " << e.what() << endl;
+			
+			if(data.compare(0,4,"AUTH") == 0 && message["auth"] == true) {
+				pss->authenticated = true;
 			}
 			
 			std::string response;
@@ -829,7 +709,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
 			while (pss->ringbuffer_tail != ringbuffer_head) {
 				LWSMessage lwsmessage = ringbuffer[pss->ringbuffer_tail];
-				if(lwsmessage.broadcast || (lwsmessage.wsi == wsi)) {
+				if(pss->authenticated && (lwsmessage.broadcast || (lwsmessage.wsi == wsi))) {
 					char buf[LWS_SEND_BUFFER_PRE_PADDING + lwsmessage.message.length() + LWS_SEND_BUFFER_POST_PADDING];
 					
 					memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], lwsmessage.message.c_str(),
@@ -908,6 +788,12 @@ static struct libwebsocket_protocols protocols[] = {
 // Then create the socket server and the websocket server separately
 //-----------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
+	struct sigaction sigIntHandler;
+	sigIntHandler.sa_handler = sigint_handler;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
+	sigaction(SIGINT, &sigIntHandler, NULL);
+	
 	conf = new Configuration();
 	pthread_mutexattr_t mutexattr;
 
@@ -922,8 +808,7 @@ int main(int argc, char* argv[]) {
 	// The first argument is the path to the config files (where the manufacturer_specific.xml file is located
 	// The second argument is the path for saved Z-Wave network state and the log file. If you leave it NULL
 	// the log file will appear in the program's working directory.
-	//Options::Create("../../../../config/", "", "");
-	Options::Create("./config/", "", "");
+	Options::Create("/usr/local/etc/openzwave/", "", "");
 	Options::Get()->AddOptionInt("RetryTimeout", 5000);
 	Options::Get()->Lock();
 
@@ -982,52 +867,39 @@ int main(int argc, char* argv[]) {
 			std::cout << "Websocket starting" << endl;
 		}
 		
-		int tcpport;
+		string tcpport;
 		if(!conf->GetTCPPort(tcpport)) {
 			std::cerr << "There is no TCP port set in Config.ini, please specify one and try again.\n";
 			return 0;
 		}
 		std::cout << "Starting TCP server on port: " << tcpport << endl;
+		string host = "0.0.0.0";
+		using libsocket::inet_stream_server;
+		using libsocket::inet_stream;
+			
+		inet_stream_server srv(host,tcpport,LIBSOCKET_IPv4);
 		
 		while(!stopping) {
-			try { // for all socket errors
-				server = new Socket();
-				if(!server->create()) {
-					throw SocketException ( "Could not create server socket." );
+			
+			inet_stream* client = srv.accept();
+			
+			pthread_t thread;
+			try {
+				if(pthread_create(&thread, NULL, run_socket, (void*) client) < 0) {
+					throw std::runtime_error("Unable to create thread");
 				}
-				if(!server->bind(tcpport)) {
-					throw SocketException ( "Could not bind to port." );
+				else {
+					std::cout << "Socket connection established" << endl;
 				}
-				if(!server->listen()) {
-					throw SocketException ( "Could not listen to socket." );
-				}
-				Socket new_sock;
-				while(server->accept(new_sock)) {
-					pthread_t thread;
-					int thread_sock2;
-					thread_sock2 = new_sock.GetSock();
-					if(pthread_create(&thread, NULL, run_socket, (void*) (intptr_t) thread_sock2) < 0) {
-						throw std::runtime_error("Unable to create thread");
-					}
-					else {
-						std::cout << "Socket connection established" << endl;
-					}
-				}
-			}
-			catch (SocketException& e) {
-				std::cout << "SocketException: " << e.what() << endl;
 			}
 			catch(...) {
 				std::cout << "Other exception" << endl;
 			}
-			std::cout << "Either server is stopping or an exception is caught" << endl;
-			std::cout << "If an exception is caught, resolve the issue and press ENTER to continue" << endl;
-			std::cin.ignore();
 		}
+		srv.destroy();
     }
 	
 	// program exit (clean up)
-	delete server;
 	delete conf;
 	Manager::Get()->WriteConfig(g_homeId);
 	std::cout << "Closing connection to Zwave Controller" << endl;
@@ -1043,6 +915,14 @@ int main(int argc, char* argv[]) {
 	Options::Destroy();
 	pthread_mutex_destroy(&g_criticalSection);
 	return 0;
+}
+
+//-----------------------------------------------------------------------------
+// sigint_handler
+// Handles SIGINT program termination (CTRL+C)
+//-----------------------------------------------------------------------------
+void sigint_handler(int sig) {
+	stopping = true;
 }
 
 //-----------------------------------------------------------------------------
@@ -1215,36 +1095,46 @@ void *websockets_main(void* arg) {
 // This thread listens for commands on the socket connection
 //-----------------------------------------------------------------------------
 void *run_socket(void* arg) {
-	Socket thread_sock;
-	thread_sock.SetSock((intptr_t)arg);
-	while(true) {
+	using libsocket::inet_stream;
+	inet_stream* client;
+	client = (inet_stream*) arg;
+	
+	while(!stopping) {
 		try { // command parsing errors
 			//get commands from the socket
 			std::string data;
-			thread_sock >> data;
+			data.resize(1024);
+			*client >> data;
 			
-			if(data.empty()) { //client closed the connection
+			if(data.empty()) {
 				std::cout << "Socket client closed the connection" << endl;
+				client->destroy();
 				return 0;
 			}
+			std::cout << "Received socket data: " << data;
 			Json::Value message;
 			process_commands(data, message);
 			Json::FastWriter fastWriter;
-			thread_sock << fastWriter.write(message) + "\n";
+			string response = fastWriter.write(message) + "\n";
+			*client << response;
 		}
-		catch (ProtocolException& e) {
+		catch (OZWSS::ProtocolException& e) {
 			string what = "ProtocolException: ";
 			what += e.what();
 			what += "\n";
-			thread_sock << what;
+			*client << what;
+		}
+		catch (libsocket::socket_exception exc) {
+			std::cerr << exc.mesg << " errno code: " << exc.err;
 		}
 		catch (std::exception const& e) {
 			std::cout << "Exception: " << e.what() << endl;
 		}
-		catch (SocketException& e) {
-			std::cout << "SocketException: " << e.what() << endl;
-		}
 	}
+	std::cout << "Server is stopping, closing socket connection" << endl;
+	*client << "Server is stopping, closing socket connection";
+	client->destroy();
+	return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -1260,7 +1150,40 @@ std::string process_commands(std::string data, Json::Value& message) {
 	{
 		case Auth:
 		{
-			message["auth"] = true;
+			std::string client_id, client_secret;
+			if(conf->GetGoogleClientIdAndSecret(client_id, client_secret)) {
+				using libsocket::unix_stream_client;
+				message["auth"] = false;
+				Json::Value gapi_message;
+				gapi_message["access_token"] = v[1];
+				gapi_message["client_id"] = client_id;
+				gapi_message["client_secret"] = client_secret;
+				gapi_message["redirect_url"] = "";
+				
+				std::string tokeninfo_response(1024,NULL), profile(2048,NULL), closing_data(1024,NULL);
+				
+				try {
+					unix_stream_client sock("/tmp/gapi.sock");
+					
+					Json::FastWriter fastWriter;
+					sock << fastWriter.write(gapi_message).c_str();
+					sock >> tokeninfo_response;
+					sock >> profile;
+					sock.shutdown(LIBSOCKET_WRITE);
+					sock >> closing_data;
+					
+					if(!tokeninfo_response.empty() && !profile.empty())
+					{
+						message["profile"] = profile;
+						message["auth"] = true;
+					}
+				}
+				catch (const libsocket::socket_exception& exc) {
+					message["error"]["err_main"] = "Could not authenticate";
+					message["error"]["err_message"] = "Failed communicate with the Google api wrapper";
+					break;
+				}
+			}
 			break;
 		}
 		case AList:
@@ -1268,20 +1191,27 @@ std::string process_commands(std::string data, Json::Value& message) {
 			int nodepos = 0;
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				NodeInfo* nodeInfo = *it;
-				std::string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
-				if(nodeType == "Static PC Controller" || nodeType == "") {
-					continue;
-				}
 				
 				Json::Value node;
 				std::string nodeName = Manager::Get()->GetNodeName(g_homeId, nodeInfo->m_nodeId);
 				if(nodeName.size() == 0) {
 					nodeName = "Undefined";
 				}
+				std::string nodeType = Manager::Get()->GetNodeType(g_homeId, nodeInfo->m_nodeId);
+				if(nodeType == "Static PC Controller" || nodeType == "") {
+					continue;
+				}
+				std::string manufacturerName = Manager::Get()->GetNodeManufacturerName(g_homeId, nodeInfo->m_nodeId);
+				std::string productName = Manager::Get()->GetNodeProductName(g_homeId, nodeInfo->m_nodeId);
+				std::string productId = Manager::Get()->GetNodeProductId(g_homeId, nodeInfo->m_nodeId);
+				
 				node["Name"] = nodeName;
 				node["ID"] = nodeInfo->m_nodeId;
 				node["Location"] = Manager::Get()->GetNodeLocation(g_homeId, nodeInfo->m_nodeId);
 				node["Type"] = nodeType;
+				node["Manufacturer"] = manufacturerName;
+				node["ProductName"] = productName;
+				node["ProductId"] = productId;
 				
 				for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
 					std::string tempstr="";
@@ -1309,7 +1239,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case SetNode:
 		{
 			if(v.size() != 3) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			int Node = 0;
 			string Options = "";
@@ -1348,21 +1278,23 @@ std::string process_commands(std::string data, Json::Value& message) {
 		}
 		case RoomListC:
 		{
-			int roompos = 0;
+			Json::Value rooms(Json::arrayValue);
 			for(list<Room>::iterator rit=roomList.begin(); rit!=roomList.end(); ++rit) {
 				Json::Value room;
 				room["Name"] = rit->name;
 				room["currentSetpoint"] = rit->setpoint;
-				room["currentTemp"] = rit->currentTemp;
-				message["rooms"][roompos] = room;
-				++roompos;
+				stringstream ssCurrentTemp;
+				ssCurrentTemp << rit->currentTemp;
+				room["currentTemp"] = ssCurrentTemp.str();
+				rooms.append(room);
 			}
+			message["rooms"] = rooms;
 			break;
 		}
 		case RoomC:
 		{
 			if(v.size() != 3) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			std::string location = trim(v[2]);
 			for(list<Room>::iterator rit=roomList.begin(); rit!=roomList.end(); ++rit) {
@@ -1381,7 +1313,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 						rit->changed = true;
 						break;
 					default:
-						throw ProtocolException(1, "Unknown Room command");
+						throw OZWSS::ProtocolException("Unknown Room command", 1);
 						break;
 				}
 				stringstream setpoint, currentTemp;
@@ -1389,7 +1321,9 @@ std::string process_commands(std::string data, Json::Value& message) {
 				currentTemp << rit->currentTemp;
 				message["room"]["Name"] = location;
 				message["room"]["currentSetpoint"] = rit->setpoint;
-				message["room"]["currentTemp"] = rit->currentTemp;
+				stringstream ssCurrentTemp;
+				ssCurrentTemp << rit->currentTemp;
+				message["room"]["currentTemp"] = ssCurrentTemp.str();
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
 			
@@ -1412,7 +1346,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case SceneC:
 		{
 			if(v.size() < 3) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			switch(s_mapStringCommands[trim(v[1])])
 			{
@@ -1438,13 +1372,13 @@ std::string process_commands(std::string data, Json::Value& message) {
 				case Add:
 				{
 					if(v.size() != 5) {
-						throw ProtocolException(2, "Wrong number of arguments");
+						throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 					}
 					uint8 numscenes = 0;
 					uint8 *sceneIds = new uint8[numscenes];
 					
 					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-						throw ProtocolException(3, "No scenes created");
+						throw OZWSS::ProtocolException("No scenes created", 3);
 					}
 					
 					string sclabel = trim(v[2]);
@@ -1533,13 +1467,13 @@ std::string process_commands(std::string data, Json::Value& message) {
 				case Remove:
 				{
 					if(v.size() != 4) {
-						throw ProtocolException(2, "Wrong number of arguments");
+						throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 					}
 					uint8 numscenes = 0;
 					uint8 *sceneIds = new uint8[numscenes];
 					
 					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-						throw ProtocolException(3, "No scenes created");
+						throw OZWSS::ProtocolException("No scenes created", 3);
 					}
 					
 					string sclabel = trim(v[2]);
@@ -1585,7 +1519,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 					break;
 				}
 				default:
-					throw ProtocolException(1, "Unknown Scene command");
+					throw OZWSS::ProtocolException("Unknown Scene command", 1);
 					break;
 			}
 			break;
@@ -1595,7 +1529,10 @@ std::string process_commands(std::string data, Json::Value& message) {
 			switch(s_mapStringCommands[trim(v[1])])
 			{
 				case Add: {
-					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_AddDevice, OnControllerUpdate)) {
+					if(v.size() != 3) {
+						throw OZWSS::ProtocolException("Wrong number of arguments", 2);
+					}
+					if(Manager::Get()->AddNode(g_homeId, lexical_cast<bool>(v[2]))) {
 						message["text"] = "Controller is now in inclusion mode, see the server console for more information";
 					} else {
 						message["error"]["err_main"] = "Controller could not be set to inclusion mode, see the server console for more information";
@@ -1603,7 +1540,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 					break;
 				}
 				case Remove: {
-					if(Manager::Get()->BeginControllerCommand(g_homeId, Driver::ControllerCommand_RemoveDevice, OnControllerUpdate)) {
+					if(Manager::Get()->RemoveNode(g_homeId)) {
 						message["text"] = "Controller is now in exclusion mode, see the server console for more information";
 					} else {
 						message["error"]["err_main"] = "Controller could not be set to exclusion mode, see the server console for more information";
@@ -1635,7 +1572,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 			time_t sunrise = 0, sunset = 0;
 			float lat, lon;
 			conf->GetLocation(lat, lon);
-			if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
+			if(OZWSS::GetSunriseSunset(sunrise,sunset,lat,lon)) {
 				SetAlarm("Sunrise", sunrise, false);
 				SetAlarm("Sunset", sunset, false);
 			}
@@ -1726,7 +1663,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case PollInterval:
 		{
 			if(v.size() != 2) {
-				throw ProtocolException(2, "Wrong number of arguments");
+				throw OZWSS::ProtocolException("Wrong number of arguments", 2);
 			}
 			int interval = lexical_cast<int>(v[1]); //get the interval in minutes
 			Manager::Get()->SetPollInterval(1000*60*interval, false);
@@ -1750,7 +1687,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 			stopping = true;
 			break;
 		default:
-			throw ProtocolException(1, "Unknown command");
+			throw OZWSS::ProtocolException("Unknown command", 1);
 			break;
 	}
 	return output;
@@ -1969,7 +1906,7 @@ std::string activateScene(std::string sclabel) {
 	sclabel = trim(sclabel);
 	
 	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
-		throw ProtocolException(3, "No scenes created");
+		throw OZWSS::ProtocolException("No scenes created", 3);
 	}
 	
 	int scid=0;
@@ -1984,7 +1921,7 @@ std::string activateScene(std::string sclabel) {
 		return "Activate scene "+sclabel;
 	}
 	delete sceneIds;
-	throw ProtocolException(4, "Scene not found");
+	throw OZWSS::ProtocolException("Scene not found", 4);
 }
 
 //-----------------------------------------------------------------------------
@@ -2000,7 +1937,7 @@ std::string switchAtHome() {
 		output += "Could not get the location from Config.ini\n";
 		return output;
 	}
-	if(GetSunriseSunset(sunrise,sunset,lat,lon)) {
+	if(OZWSS::GetSunriseSunset(sunrise,sunset,lat,lon)) {
 		atHome = !atHome;
 		if(atHome) {
 			output += "Welcome home\n";
@@ -2012,7 +1949,7 @@ std::string switchAtHome() {
 				try {
 					output += activateScene(dayScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					std::string what = "ProtocolException: ";
 					what += e.what();
 					output += what + "\n";
@@ -2026,7 +1963,7 @@ std::string switchAtHome() {
 				try {
 					output += activateScene(nightScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					std::string what = "ProtocolException: ";
 					what += e.what();
 					output += what + "\n";
@@ -2041,7 +1978,7 @@ std::string switchAtHome() {
 			try {
 				output += activateScene(awayScene);
 			}
-			catch (ProtocolException& e) {
+			catch (OZWSS::ProtocolException& e) {
 				string what = "ProtocolException: ";
 				what += e.what();
 				output += what + "\n";
@@ -2123,7 +2060,7 @@ void sigalrm_handler(int sig) {
 				try {
 					std::cout << activateScene(morningScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					string what = "ProtocolException: ";
 					what += e.what();
 					std::cout << what << endl;
@@ -2140,7 +2077,7 @@ void sigalrm_handler(int sig) {
 				try {
 					std::cout << activateScene(nightScene);
 				}
-				catch (ProtocolException& e) {
+				catch (OZWSS::ProtocolException& e) {
 					string what = "ProtocolException: ";
 					what += e.what();
 					std::cout << what << endl;

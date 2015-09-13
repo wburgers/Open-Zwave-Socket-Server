@@ -1,43 +1,67 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 	<head>
-		<script src="bower_components/webcomponentsjs/webcomponents.js"></script>
-		<script src="settings.js"></script>
-		<link rel="import" href="elements.html">
 		<link rel="stylesheet" href="polymer-client.css">
+		<script src="bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+		<link rel="import" href="elements.html">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<script src="settings.js"></script>
 	</head>
-	<body fullbleed unresolved>
-		<core-drawer-panel  responsiveWidth="980px" drawerWidth="190px" id="drawerPanel">
-			<core-header-panel class="menu-panel" drawer>
-				<core-toolbar id="navheader">
-					<span>Menu</span>
-				</core-toolbar>
-				<google-signin-status></google-signin-status>
-				<google-signin clientId="1071014637559-98n0slctghgda7c676ublsoa4usv86tu.apps.googleusercontent.com" scopes="profile" raised="true"></google-signin>
-				<core-menu selected="0">
-					<core-item label="Rooms"></core-item>
-					<core-item label="Scenes"></core-item>
-					<core-item label="Controller"></core-item>
-				</core-menu>
-				<paper-input id="sendinput" label="Type commands here..."></paper-input>
-			</core-header-panel>
-			
-			<core-header-panel main>
-				<core-toolbar id="mainheader">
-					<paper-icon-button core-drawer-toggle icon="menu"></paper-icon-button>
-					<span flex>Polymer-Client</span>
-					<status-dot name="Websocket Status" status="Off" id="websocket-status"></status-dot>
-					<switch-button id="switchbutton"></switch-button>
-				</core-toolbar>
-				
-				<div class="content">
-					<room-list id="room-list"></room-list>
-					<single-room id="single-room"></single-room>
-					<scene-list id="scene-list"></scene-list>
-				</div>
-			</core-header-panel>
-		</core-drawer-panel>
+	<body fullbleed>
+		<template is="dom-bind" id="app">
+			<paper-drawer-panel responsive-width="980px" drawer-width="170px" id="paperDrawerPanel">
+				<paper-header-panel drawer>
+					<paper-toolbar>
+						<span>Menu</span>
+					</paper-toolbar>
+					<OZWSS-Polymer-google-signin-status id="google-signin-status"></OZWSS-Polymer-google-signin-status>
+					<google-signin id="google-signin" scopes="profile" raised="true"></google-signin>
+					<paper-menu class="list" attr-for-selected="data-route" selected="{{route}}" on-iron-select="onMenuSelect">
+						<paper-item data-route="rooms">
+							<iron-icon icon="home"></iron-icon>
+							<paper-item-body>
+								<span>Rooms</span>
+							</paper-item-body>
+						</paper-item>
+						<paper-item data-route="scenes">
+							<iron-icon icon="av:play-arrow"></iron-icon>
+							<paper-item-body>
+								<span>Scenes</span>
+							</paper-item-body>
+						</paper-item>
+						<paper-item data-route="controller">
+							<iron-icon icon="settings"></iron-icon>
+							<paper-item-body>
+								<span>Controller</span>
+							</paper-item-body>
+						</paper-item>
+					</paper-menu>
+					<paper-input id="sendinput" label="Type commands here..."></paper-input>
+				</paper-header-panel>
+				<paper-header-panel main>
+					<paper-toolbar>
+						<paper-icon-button icon="menu" paper-drawer-toggle></paper-icon-button>
+						<span class="flex">Polymer Client</span>
+						<OZWSS-Polymer-status-dot id="websocket-status" name="Websocket status"></OZWSS-Polymer-status-dot>
+						<OZWSS-Polymer-switch-button id="switch-button"></OZWSS-Polymer-switch-button>
+					</paper-toolbar>
+					<iron-pages attr-for-selected="data-route" selected="{{route}}">
+						<section data-route="rooms">
+							<OZWSS-Polymer-room-list id="room-list"></OZWSS-Polymer-room-list>
+						</section>
+						<section data-route="single_room">
+							<OZWSS-Polymer-single-room id="single-room"></OZWSS-Polymer-single-room>
+						</section>
+						<section data-route="scenes">
+							<OZWSS-Polymer-scene-list id="scene-list"></OZWSS-Polymer-scene-list>
+						</section>
+						<section data-route="controller">
+							Controller commands (todo)
+						</section>
+					</iron-pages>
+				</paper-header-panel>
+			</paper-drawer-panel>
+		</template>
 		<script src="polymer-client.js"></script>
 	</body>
 </html>

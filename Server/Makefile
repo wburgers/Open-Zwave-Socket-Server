@@ -22,31 +22,21 @@ DEBUG_LDFLAGS   := -g
 CFLAGS  := -c $(DEBUG_CFLAGS)
 LDFLAGS := $(DEBUG_LDFLAGS)
 
-INCLUDES	:= -I ../../src -I ../../src/command_classes/ -I ../../src/value_classes/ \
-        	-I ../../src/platform/ -I ../../h/platform/unix -I ../../tinyxml/ \
-		-I ../../hidapi/hidapi/
-
-LIBS = $(wildcard ../../lib/linux/*.a) $(wildcard ../../lib/*.a) $(wildcard ../../build/*.a)
+INCLUDES	:= -I /usr/local/include/openzwave -I /usr/local/include/openzwave/value_classes
 
 %.o : %.cpp
-	$(CXX) $(CFLAGS) $(INCLUDES) -o $@ $<
+	$(CXX) $(CFLAGS) $(INCLUDES) -Wno-unknown-pragmas -o $@ $<
 
 all: openzwave-server
 
-lib:
-	$(MAKE) -C ../../build -$(MAKEFLAGS)
-
-Socket: Socket.o
-	$(LD) $(CFLAGS) Socket.cpp -o Socket.o
-
-Sunrise: sunrise.o
-	$(LD) -c -Wall sunrise.cpp -o Sunrise.o -lm
+Sunrise:
+	$(LD) -c -Wall Sunrise.cpp -o Sunrise.o -lm
 	
 Configuration:
 	$(LD) $(CFLAGS) Configuration.cpp -o Configuration.o
 
-openzwave-server: Main.o Socket Sunrise Configuration lib
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS) Socket.o Sunrise.o Configuration.o -lwebsockets -pthread -ludev -ljsoncpp
+openzwave-server: Main.o Sunrise Configuration
+	$(LD) -o $@ $(LDFLAGS) $< Sunrise.o Configuration.o -lopenzwave -lwebsockets -pthread -ludev -ljsoncpp -lsocket++
 
 clean:
 	rm -f openzwave-server *.o

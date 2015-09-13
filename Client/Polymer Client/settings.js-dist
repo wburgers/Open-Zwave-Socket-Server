@@ -1,3 +1,4 @@
 var server_ip = 'put_your_server_ip_here';
 var port = '60005';
 var secure = false;
+var client_id = "put_your_google_api_client_id_here";

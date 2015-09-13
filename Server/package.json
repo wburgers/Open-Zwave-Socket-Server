@@ -1,0 +1,26 @@
+{
+  "name": "Open-Zwave-Socket-Server",
+  "version": "0.1.6",
+  "description": "A websocket and tcp server for open-zwave",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wburgers/Open-Zwave-Socket-Server.git"
+  },
+  "keywords": [
+    "Open-Zwave-Socket-Server",
+    "Socket",
+    "Server"
+  ],
+  "author": "Willem Burgers",
+  "license": "GNU Lesser General Public Licence",
+  "bugs": {
+    "url": "https://github.com/wburgers/Open-Zwave-Socket-Server/issues"
+  },
+  "dependencies": {
+    "googleapis": "~2.0.2"
+  }
+}

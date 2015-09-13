@@ -1,5 +1,5 @@
 ### Installation instructions:
-First, install dependencies for libwebsockets:
+First, install dependencies for libwebsockets, jsoncpp and libsocket:
 ```
 sudo apt-get install build-essential cmake libssl-dev zlib1g-dev
 ```
@@ -27,26 +27,48 @@ sudo make install
 cd
 ```
 
-After libwebsockets and jsoncpp are completely installed, it is time to build open-zwave and OZSS
+Finally, we are going to install [libsocket++](https://github.com/dermesser/libsocket)
+After the git clone, do:
+```
+cd libsocket
+cmake CMakeLists.txt
+make
+sudo make install
+cd
+```
+
+After libwebsockets, jsoncpp and libsocket++ are completely installed, it is time to build open-zwave and OZSSW.
 To compile open-zwave, you need libudev-dev, so:
 ```
 sudo apt-get install libudev-dev
 ```
-Then clone [open-zwave](https://github.com/OpenZWave/open-zwave).
-You can then clone this repo.
-Place the server folder of this repo in the open-zwave folder as open-zwave/cpp/examples/server, for example with a mount bind.
+Then clone [open-zwave](https://github.com/OpenZWave/open-zwave) and install it:
 ```
-mount --rbind /path/to/Open-Zwave-Socket-Server/Server /path/to/open-zwave/cpp/examples/server
+git clone https://github.com/OpenZWave/open-zwave.git
+cd open-zwave
+make
+sudo make install
+cd
 ```
-From the /path/to/open-zwave/.../server folder call make. This will build both open-zwave and the Open Zwave Socket Server.
-The exacutable is in the same server folder.
+You can then clone this repo and make it:
+```
+git clone https://github.com/wburgers/Open-Zwave-Socket-Server.git
+cd Open-Zwave-Socket-Server
+cd Server
+make
+```
+
+The exacutable is in the same Server folder.
 Copy the config.ini-dist to config.ini and set the options you want.
-I run my server from the root folder of open-zwave.
+
+I included a form of identification for the websocket port.
+Please note that this is not included for the socket port and therefore it is not advised to expose the socket port to the Internet.
+To use the identification method, install node and npm and run the node gapiwrapper.
+
 ```
-cp /path/to/open-zwave/.../server/openzwave-server /path/to/open-zwave/openzwave-server
-/path/to/open-zwave/openzwave-server &
+npm install
+node gapiwrapper.js
 ```
-If you want to run it anywhere else, you have to specify the open-zwave config folder in main.cpp and rebuild the server or copy the config folder.
 
 Additionally, you can schedule zcron.sh to be run at a specific time.
 I run mine every day at 4 AM. This schedules my sunrise and sunset triggers.
@@ -63,4 +85,10 @@ Please note that the Scenes themselves should still be created. See the COMMANDL
 Scenes are saved automatically by open-zwave.
 
 Finally, if you want to run the Polymer Client (recommended), please run a bower update in the Polymer Client folder after installing node, npm and bower.
-Also make sure the Clients folder is hosted by your webserver of choice
+Also make sure the Clients folder is hosted by your webserver of choice.
+The Polymer Client makes use of the gapiwrapper.js file.
+Since Google does not really update their c++ api clients, I made a small wrapper in node to call google apis.
+To run this wrapper, simply run the following command in a new terminal (preferably in screen or something similar).
+```
+node gapiwrapper.js
+```
