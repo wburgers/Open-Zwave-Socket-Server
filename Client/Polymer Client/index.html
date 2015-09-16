@@ -1,14 +1,18 @@
 <!doctype html>
 <html>
 	<head>
-		<link rel="stylesheet" href="polymer-client.css">
-		<script src="bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
-		<link rel="import" href="elements.html">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<link rel="shortcut icon" href="#">
+		<script src="bower_components/webcomponentsjs/webcomponents-lite.min.js" async></script>
+		<link rel="import" href="elements.html">
+		<link rel="stylesheet" href="polymer-client.css">
 		<script src="settings.js"></script>
 	</head>
-	<body fullbleed>
+	<body class="fullbleed">
 		<template is="dom-bind" id="app">
+			<platinum-sw-register auto-register>
+				<platinum-sw-cache defaultCacheStrategy="fastest"></platinum-sw-cache>
+			</platinum-sw-register>
 			<paper-drawer-panel responsive-width="980px" drawer-width="170px" id="paperDrawerPanel">
 				<paper-header-panel drawer>
 					<paper-toolbar>

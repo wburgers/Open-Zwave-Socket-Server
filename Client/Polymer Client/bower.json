@@ -15,8 +15,9 @@
     "polymer": "Polymer/polymer#^1.1.0",
     "iron-elements": "PolymerElements/iron-elements",
     "paper-elements": "PolymerElements/paper-elements",
+	"platinum-sw": "PolymerElements/platinum-sw#^1.2.0",
 	"google-signin": "GoogleWebComponents/google-signin#^1.0.0",
-	
+
 	"OZWSS-Polymer-status-dot": "git://github.com/wburgers/OZWSS-Polymer-status-dot#master",
 	"OZWSS-Polymer-switch-button": "git://github.com/wburgers/OZWSS-Polymer-switch-button#master",
 	"OZWSS-Polymer-google-signin-status": "git://github.com/wburgers/OZWSS-Polymer-google-signin-status#master",
