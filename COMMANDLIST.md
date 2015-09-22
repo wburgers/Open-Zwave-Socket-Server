@@ -6,7 +6,7 @@ This command has no parameters
 ### SETNODE
 With the SETNODE command, you can change specific values of a device.
 The following things can be set with a SETNODE command:
-	Name, Location, Level, Thermostat Setpoint, Polling, Wake-up Interval and Battery report
+	Name, Location, Level, Switch, Thermostat Setpoint, Polling, Wake-up Interval and Battery report
 
 For example, to set the name of node 2 to "living room lamp 1"
 ```
@@ -16,6 +16,8 @@ You can set multiple values for a single device in one SETNODE command. These ar
 ```
 SETNODE~2~Name=living room lamp 1<>Location=living room
 ```
+For multilevel devices (dimmers), the Level can be set from 0 to 99. A binary switch can be set with Switch=true/false.
+
 ### ROOMLIST
 Much like the ALIST, this is a list of locations in you zwave network.
 If you set the location of a device, a room is automatically created.
@@ -70,7 +72,12 @@ This will execute the scene and set all the proper values for the nodes.
 With a CONTROLLER command, you can add or remove devices from your open-zwave network.
 To add a device to the network use:
 ```
-CONTROLLER~ADD
+CONTROLLER~ADD~false
+```
+
+To add a secure device (gen5 devices) to the network, use:
+```
+CONTROLLER~ADD~true
 ```
 
 To remove a device from the network use:
