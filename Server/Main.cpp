@@ -274,7 +274,7 @@ T lexical_cast(const std::string& s) {
 	std::stringstream ss(s);
 
 	T result;
-	if(((ss >> std::boolalpha >> result).fail() && (ss >> result).fail()) || !(ss >> std::ws).eof())
+	if((ss >> result).fail() || !(ss >> std::ws).eof())
 	{
 		throw std::runtime_error("Bad cast");
 	}
