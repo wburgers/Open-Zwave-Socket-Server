@@ -759,7 +759,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 			std::cout << "open-zwave protocol not used anymore" << endl;
 		}
 		default:
-		break;
+			break;
 	}
 	return 0;
 }
@@ -1061,6 +1061,7 @@ void *websockets_main(void* arg) {
 
 	// create connection struct
 	struct lws_context_creation_info info;
+	memset(&info, 0, sizeof info);
 	info.port = port;
 	info.iface = interface;
 	info.protocols = protocols;
@@ -1084,6 +1085,7 @@ void *websockets_main(void* arg) {
 	while (!stopping) {
 		libwebsocket_service(context, 10);
 	}
+	
 	libwebsocket_context_destroy(context);
 	
 	return 0;
