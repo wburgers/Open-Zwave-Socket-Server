@@ -1235,7 +1235,6 @@ std::string process_commands(std::string data, Json::Value& message) {
 				message["nodes"][nodepos] = node;
 				++nodepos;
 			}
-			std::cout << "Sent Device List \n";
 			break;
 		}
 		case SetNode:

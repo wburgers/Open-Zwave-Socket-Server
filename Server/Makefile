@@ -22,7 +22,7 @@ DEBUG_LDFLAGS   := -g
 CFLAGS  := -c $(DEBUG_CFLAGS)
 LDFLAGS := $(DEBUG_LDFLAGS)
 
-INCLUDES	:= -I /usr/local/include/openzwave -I /usr/local/include/openzwave/value_classes
+INCLUDES	:= -I /usr/local/include/openzwave
 
 %.o : %.cpp
 	$(CXX) $(CFLAGS) $(INCLUDES) -Wno-unknown-pragmas -o $@ $<
@@ -40,7 +40,6 @@ openzwave-server: Main.o Sunrise Configuration
 
 clean:
 	rm -f openzwave-server *.o
-	cd ../../build/; make clean
 
 XMLLINT := $(shell whereis -b xmllint | cut -c10-)
 
