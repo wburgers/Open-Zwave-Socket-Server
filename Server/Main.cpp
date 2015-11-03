@@ -47,6 +47,7 @@
 #include <stdlib.h>
 #include <stdexcept>
 #include <signal.h>
+#include <limits>
 
 //External classes and libs
 #include <libwebsockets.h>
@@ -120,6 +121,9 @@ struct SceneListItem {
 struct WakeupIntervalCacheItem {
 	uint8			nodeId;
 	int				interval;
+	int				defaultInterval;
+	int				minInterval;
+	int				maxInterval;
 };
 
 //-----------------------------------------------------------------------------
@@ -142,6 +146,7 @@ struct libwebsocket_context *context;
 // definitions
 //-----------------------------------------------------------------------------
 #define SOCKET_COLLECTION_TIMEOUT 10
+#define CACHE_INIT_TIMEOUT 5
 
 static bool stopping = false;
 static OZWSS::Configuration* conf;
@@ -153,7 +158,7 @@ static bool alarmset = false;
 static list<Alarm> alarmList;
 static list<Room> roomList;
 static list<SceneListItem> sceneList;
-static list<WakeupIntervalCacheItem> WakeupIntervalCache;
+static std::map<std::string, WakeupIntervalCacheItem> WakeupIntervalCache;
 static list<NodeInfo*> g_nodes;
 static pthread_mutex_t g_criticalSection;
 static pthread_cond_t initCond = PTHREAD_COND_INITIALIZER;
@@ -161,7 +166,7 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Value-Defintions of the different String values
 enum Commands {Undefined_command = 0, Auth, AList, SetNode, RoomListC, RoomC, Plus, Minus, SceneListC, SceneC, Create, Add, Remove, Activate, ControllerC, Cancel, Reset, Cron, Switch, AtHome, PollInterval, AlarmList, Test, Exit};
-enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update};
+enum Triggers {Undefined_trigger = 0, Sunrise, Sunset, Thermostat, Update, Cache_init};
 enum DeviceOptions {Undefined_Option = 0, Name, Location, SwitchC, Level, Thermostat_Setpoint, Polling, Wake_up_Interval, Battery_report};
 static std::map<std::string, Commands> s_mapStringCommands;
 static std::map<std::string, Triggers> s_mapStringTriggers;
@@ -197,6 +202,7 @@ void create_string_maps() {
 	s_mapStringTriggers["Sunset"] = Sunset;
 	s_mapStringTriggers["Thermostat"] = Thermostat;
 	s_mapStringTriggers["Update"] = Update;
+	s_mapStringTriggers["Cache init"] = Cache_init;
 	
 	s_mapStringOptions["Name"] = Name;
 	s_mapStringOptions["Location"] = Location;
@@ -318,14 +324,6 @@ void OnNotification(Notification const* _notification, void* _context) {
 				// Add the new value to our list
 				nodeInfo->m_values.push_back( _notification->GetValueID());
 			}
-			
-			if(_notification->GetValueID().GetCommandClassId() == COMMAND_CLASS_WAKE_UP) {
-				if(strcmp(Manager::Get()->GetValueLabel(_notification->GetValueID()).c_str(),"Wake-up Interval")==0) {
-					WakeupIntervalCache.clear();
-					init_WakeupIntervalCache();
-				}
-			}
-			
 			break;
 		}
 
@@ -390,7 +388,8 @@ void OnNotification(Notification const* _notification, void* _context) {
 						}
 					}
 				}
-				else if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Temperature") == 0) {
+				
+				if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Temperature") == 0) {
 					std::string location = Manager::Get()->GetNodeLocation(_notification->GetHomeId(), _notification->GetNodeId());
 					float currentTemp = 20.00;
 					if(Manager::Get()->GetValueAsFloat(vid,&currentTemp)) {
@@ -407,19 +406,22 @@ void OnNotification(Notification const* _notification, void* _context) {
 				}
 				
 				if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Wake-up Interval") == 0) {
-					for(list<WakeupIntervalCacheItem>::iterator wiciit=WakeupIntervalCache.begin(); wiciit!=WakeupIntervalCache.end(); ++wiciit) {
-						if(nodeInfo->m_nodeId != wiciit->nodeId) {
-							continue;
-						}
+					stringstream key;
+					key << (int) _notification->GetHomeId() << (int) _notification->GetNodeId();
+					if(WakeupIntervalCache.count(key.str()) == 0)
+					{
+						SetAlarm("Cache init", CACHE_INIT_TIMEOUT, true);
+					}
+					else
+					{
+						WakeupIntervalCacheItem cacheItem = WakeupIntervalCache[key.str()];
 						int interval;
-						if(Manager::Get()->GetValueAsInt(vid,&interval)) {
-							if(wiciit->interval != interval) {
-								stringstream ssInterval;
-								ssInterval << wiciit->interval;
-								string err_message = "";
-								if(!SetValue(g_homeId, nodeInfo->m_nodeId, ssInterval.str(),COMMAND_CLASS_WAKE_UP, "Wake-up Interval", err_message)) {
-									std::cout << err_message;
-								}
+						if(Manager::Get()->GetValueAsInt(vid,&interval) && cacheItem.interval != interval) {
+							stringstream ssInterval;
+							ssInterval << cacheItem.interval;
+							string err_message = "";
+							if(!SetValue(g_homeId, nodeInfo->m_nodeId, ssInterval.str(),COMMAND_CLASS_WAKE_UP, "Wake-up Interval", err_message)) {
+								std::cout << err_message;
 							}
 						}
 					}
@@ -1014,20 +1016,46 @@ bool init_Scenes() {
 //-----------------------------------------------------------------------------
 bool init_WakeupIntervalCache() {
 	for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
+		int defaultInterval = 0, minInterval = 0, maxInterval = std::numeric_limits<int>::max(), interval = 0;
+		bool wake_cc_node = false;
 		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
 			if((*vit).GetCommandClassId() != COMMAND_CLASS_WAKE_UP) {
 				continue;
 			}
+			wake_cc_node = true;
 			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Wake-up Interval") == 0) {
-				int interval;
-				if(Manager::Get()->GetValueAsInt((*vit), &interval)) {
-					WakeupIntervalCacheItem newCacheItem;
-					newCacheItem.nodeId = (*it)->m_nodeId;
-					newCacheItem.interval = interval;
-					WakeupIntervalCache.push_back(newCacheItem);
+				if(!Manager::Get()->GetValueAsInt((*vit), &interval)) {
+					return false;
 				}
 				std::cout << "Interval: " << interval << endl;
 			}
+			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Default Wake-up Interval") == 0) {
+				if(!Manager::Get()->GetValueAsInt((*vit), &defaultInterval)) {
+					return false;
+				}
+			}
+			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Minimum Wake-up Interval") == 0) {
+				if(!Manager::Get()->GetValueAsInt((*vit), &minInterval)) {
+					return false;
+				}
+			}
+			if(strcmp(Manager::Get()->GetValueLabel(*vit).c_str(), "Maximum Wake-up Interval") == 0) {
+				if(!Manager::Get()->GetValueAsInt((*vit), &maxInterval)) {
+					return false;
+				}
+			}
+		}
+		if(wake_cc_node)
+		{
+			stringstream key;
+			key << (int) g_homeId << (int) (*it)->m_nodeId;
+			WakeupIntervalCacheItem newCacheItem;
+			newCacheItem.nodeId = (*it)->m_nodeId;
+			newCacheItem.interval = interval;
+			newCacheItem.defaultInterval = defaultInterval;
+			newCacheItem.minInterval = minInterval;
+			newCacheItem.maxInterval = maxInterval;
+			WakeupIntervalCache.insert(std::pair<std::string, WakeupIntervalCacheItem>(key.str(),newCacheItem));
 		}
 	}
 	return true;
@@ -1800,14 +1828,33 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		}
 		case Wake_up_Interval:
 		{
-			for(list<WakeupIntervalCacheItem>::iterator wiciit=WakeupIntervalCache.begin(); wiciit!=WakeupIntervalCache.end(); ++wiciit) {
-				if(wiciit->nodeId == node) {
-					wiciit->interval = lexical_cast<int>(value);
+			stringstream key;
+			key << (int) home << (int) node;
+			
+			if(WakeupIntervalCache.count(key.str()) == 0)
+			{
+				std::cout << key.str() << endl;
+				err_message += "This device does not have a wake-up interval\n";
+				return false;
+			}
+			else
+			{
+				WakeupIntervalCacheItem cacheItem = WakeupIntervalCache[key.str()];
+				int newInterval = lexical_cast<int>(value);
+				if(cacheItem.maxInterval < newInterval || cacheItem.minInterval > newInterval)
+				{
+					err_message += "The new interval is not within bounds of min and max interval for this device\n";
+					return false;
+				}
+				else
+				{
+					cacheItem.interval = newInterval;
+					WakeupIntervalCache[key.str()] = cacheItem;
+					uint8 cmdclass = COMMAND_CLASS_WAKE_UP;
+					save = true;
+					return SetValue(home, node, value, cmdclass, name, err_message);
 				}
 			}
-			uint8 cmdclass = COMMAND_CLASS_WAKE_UP;
-			save = true;
-			return SetValue(home, node, value, cmdclass, name, err_message);
 		}
 		case Battery_report:
 		{
@@ -2134,6 +2181,12 @@ void sigalrm_handler(int sig) {
 			}
 			
 			libwebsocket_callback_on_writable_all_protocol(protocols+1);
+			break;
+		}
+		case Cache_init:
+		{
+			WakeupIntervalCache.clear();
+			init_WakeupIntervalCache();
 			break;
 		}
 		default:
