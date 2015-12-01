@@ -3,13 +3,14 @@
 	<head>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<link rel="shortcut icon" href="#">
+		<link rel="stylesheet" href="polymer-client.css">
 		<script src="bower_components/webcomponentsjs/webcomponents-lite.min.js" async></script>
 		<link rel="import" href="elements.html">
-		<link rel="stylesheet" href="polymer-client.css">
 		<script src="settings.js"></script>
 	</head>
 	<body class="fullbleed">
 		<template is="dom-bind" id="app">
+			<websocket-component url="{{wsURL}}" protocols="{{wsProtocols}}" status="{{wsStatus}}" auto></websocket-component>
 			<platinum-sw-register skip-waiting clients-claim auto-register>
 				<platinum-sw-cache defaultCacheStrategy="fastest"></platinum-sw-cache>
 			</platinum-sw-register>
@@ -46,7 +47,7 @@
 					<paper-toolbar>
 						<paper-icon-button icon="menu" paper-drawer-toggle></paper-icon-button>
 						<span class="flex">Polymer Client</span>
-						<OZWSS-Polymer-status-dot id="websocket-status" name="Websocket status"></OZWSS-Polymer-status-dot>
+						<OZWSS-Polymer-status-dot id="websocket-status" name="Websocket status" websocketstatus="[[wsStatus]]"></OZWSS-Polymer-status-dot>
 						<OZWSS-Polymer-switch-button id="switch-button"></OZWSS-Polymer-switch-button>
 					</paper-toolbar>
 					<iron-pages attr-for-selected="data-route" selected="{{route}}">

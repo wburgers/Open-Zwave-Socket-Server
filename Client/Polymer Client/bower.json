@@ -18,6 +18,7 @@
 	"platinum-sw": "PolymerElements/platinum-sw#^1.2.0",
 	"google-signin": "GoogleWebComponents/google-signin#^1.0.0",
 
+	"websocket-component": "git://github.com/wburgers/websocket-component",
 	"OZWSS-Polymer-status-dot": "git://github.com/wburgers/OZWSS-Polymer-status-dot#master",
 	"OZWSS-Polymer-switch-button": "git://github.com/wburgers/OZWSS-Polymer-switch-button#master",
 	"OZWSS-Polymer-google-signin-status": "git://github.com/wburgers/OZWSS-Polymer-google-signin-status#master",
