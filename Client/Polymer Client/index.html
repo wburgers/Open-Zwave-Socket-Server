@@ -4,6 +4,11 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<link rel="shortcut icon" href="#">
 		<link rel="stylesheet" href="polymer-client.css">
+		<style is="custom-style">
+			#title {
+				@apply(--layout-flex);
+			}
+		</style>
 		<script src="bower_components/webcomponentsjs/webcomponents-lite.min.js" async></script>
 		<link rel="import" href="elements.html">
 		<script src="settings.js"></script>
@@ -46,7 +51,7 @@
 				<paper-header-panel main>
 					<paper-toolbar>
 						<paper-icon-button icon="menu" paper-drawer-toggle></paper-icon-button>
-						<span class="flex">Polymer Client</span>
+						<span id="title">Polymer Client</span>
 						<OZWSS-Polymer-status-dot id="websocket-status" name="Websocket status" websocketstatus="[[wsStatus]]"></OZWSS-Polymer-status-dot>
 						<OZWSS-Polymer-switch-button id="switch-button"></OZWSS-Polymer-switch-button>
 					</paper-toolbar>
