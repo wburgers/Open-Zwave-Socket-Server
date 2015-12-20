@@ -134,13 +134,13 @@ struct WakeupIntervalCacheItem {
 struct LWSMessage {
 	std::string			message;
 	bool				broadcast;
-	struct libwebsocket	*wsi;
+	struct lws			*wsi;
 };
 
 static std::vector<LWSMessage> ringbuffer (MAX_MESSAGE_QUEUE);
 static int ringbuffer_head = 0;
 
-struct libwebsocket_context *context;
+struct lws_context *context;
 
 //-----------------------------------------------------------------------------
 // definitions
@@ -637,11 +637,10 @@ void OnControllerUpdate(uint8 cs) {
 // Libwebsockets definitions
 //-----------------------------------------------------------------------------
 
-static int httpCallback(struct libwebsocket_context *context,
-							struct libwebsocket *wsi,
-							enum libwebsocket_callback_reasons reason,
+static int httpCallback(	struct lws *wsi,
+							enum lws_callback_reasons reason,
 							void *user, void *in, size_t len) {
-    return 0;
+	return 0;
 }
 
 struct per_session_data__open_zwave {
@@ -649,13 +648,12 @@ struct per_session_data__open_zwave {
 	bool authenticated;
 };
 
-static int open_zwaveCallback(	struct libwebsocket_context *context,
-								struct libwebsocket *wsi,
-								enum libwebsocket_callback_reasons reason,
+static int open_zwaveCallback(	struct lws *wsi,
+								enum lws_callback_reasons reason,
 								void *user, void *in, size_t len) {
 	uint n;
 	struct per_session_data__open_zwave *pss = (struct per_session_data__open_zwave *)user;
-	
+
 	// reason for callback
 	switch(reason) {
 		case LWS_CALLBACK_ESTABLISHED: {
@@ -705,7 +703,7 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 				ringbuffer_head++;
 			}
 			
-			libwebsocket_callback_on_writable_all_protocol(libwebsockets_get_protocol(wsi));
+			lws_callback_on_writable_all_protocol(lws_get_context(wsi), lws_get_protocol(wsi));
 			break;
 		}
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
@@ -716,8 +714,8 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 					
 					memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], lwsmessage.message.c_str(),
 						   lwsmessage.message.length());
-				
-					n = libwebsocket_write(wsi,
+
+					n = lws_write(wsi,
 						(unsigned char *) &buf[LWS_SEND_BUFFER_PRE_PADDING],
 						lwsmessage.message.length(),
 						LWS_WRITE_TEXT);
@@ -738,11 +736,10 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 
 				if (((ringbuffer_head - pss->ringbuffer_tail) &
 					  (MAX_MESSAGE_QUEUE - 1)) == (MAX_MESSAGE_QUEUE - 15))
-					libwebsocket_rx_flow_allow_all_protocol(
-							   libwebsockets_get_protocol(wsi));
+					lws_rx_flow_allow_all_protocol(lws_get_context(wsi), lws_get_protocol(wsi));
 
 				if (lws_send_pipe_choked(wsi)) {
-					libwebsocket_callback_on_writable(context, wsi);
+					lws_callback_on_writable(wsi);
 					break;
 				}
 				/*
@@ -767,21 +764,21 @@ static int open_zwaveCallback(	struct libwebsocket_context *context,
 }
 
 // protocol types for websockets
-static struct libwebsocket_protocols protocols[] = {  
-    {
-        "http-only",
-        httpCallback,
-        0
-    },
-    {
-        "open-zwave",
-        open_zwaveCallback,
+static struct lws_protocols protocols[] = {
+	{
+		"http-only",
+		httpCallback,
+		0
+	},
+	{
+		"open-zwave",
+		open_zwaveCallback,
 		sizeof(struct per_session_data__open_zwave),
-        0
-    },
-    {
-        NULL, NULL, 0
-    }
+		0
+	},
+	{
+		NULL, NULL, 0
+	}
 };
 
 //-----------------------------------------------------------------------------
@@ -1099,7 +1096,7 @@ void *websockets_main(void* arg) {
 	info.options = opts;
 
 	// create libwebsocket context representing this server
-	context = libwebsocket_create_context(&info);
+	context = lws_create_context(&info);
 
 	// make sure it starts
 	if(context == NULL) {
@@ -1111,11 +1108,11 @@ void *websockets_main(void* arg) {
 
 	// infinite loop, to end this server send SIGTERM. (CTRL+C)
 	while (!stopping) {
-		libwebsocket_service(context, 10);
+		lws_service(context, 10);
 	}
-	
-	libwebsocket_context_destroy(context);
-	
+
+	lws_context_destroy(context);
+
 	return 0;
 }
 
@@ -2176,8 +2173,8 @@ void sigalrm_handler(int sig) {
 			else {
 				ringbuffer_head++;
 			}
-			
-			libwebsocket_callback_on_writable_all_protocol(protocols+1);
+
+			lws_callback_on_writable_all_protocol(context, protocols+1);
 			break;
 		}
 		case Cache_init:
