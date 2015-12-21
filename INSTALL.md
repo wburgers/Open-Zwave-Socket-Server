@@ -50,6 +50,12 @@ make
 sudo make install
 cd
 ```
+N.B. When compiling on a 64-bit system, the output directory of open-zwave is probably /usr/local/lib64.
+The linker does not look into this folder by default.
+There are two possible options to fix this:
+- Use `LIBDIR=/usr/local/lib make` instead of just `make` in the example above.
+- Add the lib64 folder to the linker folders: `echo /usr/local/lib64 > /etc/ld.so.conf.d/local.conf`
+
 You can then clone this repo and make it:
 ```
 git clone https://github.com/wburgers/Open-Zwave-Socket-Server.git
