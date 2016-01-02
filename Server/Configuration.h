@@ -6,15 +6,15 @@ namespace OZWSS {
 	class Configuration {
 		private:
 			std::string conf_ini_location;
-			int ws_port;
 			float lat, lon;
+			int ws_port;
 			std::string tcp_port, morningScene, dayScene, nightScene, awayScene, certificate, certificate_key, google_client_id, google_client_secret;
 			bool open_filestream(std::ifstream& conffile);
 			bool parse_filestream(std::ifstream& conffile);
 			bool parse_variable(std::string name, std::string value);
 			void create_string_map();
 		public:
-			Configuration();
+			Configuration(std::string conf_ini_location_);
 			bool GetTCPPort(std::string &port_);
 			bool GetWSPort(int &port_);
 			bool GetLocation(float &lat_, float &lon_);

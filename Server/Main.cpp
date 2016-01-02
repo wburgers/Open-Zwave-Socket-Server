@@ -787,13 +787,36 @@ static struct lws_protocols protocols[] = {
 // Then create the socket server and the websocket server separately
 //-----------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
+	string confPath = "./Config.ini";
+	string port = "/dev/ttyUSB0";
+	if(argc > 1) {
+		for(int argIndex = 1; argIndex < argc; ++argIndex) {
+			if (argIndex + 1 != argc) {
+				if(string(argv[argIndex]) == "-confPath") {
+					confPath = string(argv[++argIndex]);
+				}
+				else if(string(argv[argIndex]) == "-serialPort") {
+					port = string(argv[++argIndex]);
+				}
+				else {
+					std::cout << "Not enough or invalid arguments, please try again.\n";
+					exit(0);
+				}
+			}
+			else {
+				std::cout << "Not enough or invalid arguments, please try again.\n";
+				exit(0);
+			}
+		}
+	}
+
 	struct sigaction sigIntHandler;
 	sigIntHandler.sa_handler = sigint_handler;
 	sigemptyset(&sigIntHandler.sa_mask);
 	sigIntHandler.sa_flags = 0;
 	sigaction(SIGINT, &sigIntHandler, NULL);
-	
-	conf = new OZWSS::Configuration();
+
+	conf = new OZWSS::Configuration(confPath);
 	pthread_mutexattr_t mutexattr;
 
 	pthread_mutexattr_init(&mutexattr);
@@ -819,13 +842,10 @@ int main(int argc, char* argv[]) {
     // avoid the need for the notification handler to be a static.
     Manager::Get()->AddWatcher(OnNotification, NULL);
 
-    // Add a Z-Wave Driver
-    // Modify this line to set the correct serial port for your PC interface.
-    string port = "/dev/ttyUSB0";
+	// Add a Z-Wave Driver
+	Manager::Get()->AddDriver(port);
+	//Manager::Get()->AddDriver( "HID Controller", Driver::ControllerInterface_Hid );
 
-    Manager::Get()->AddDriver((argc > 1) ? argv[1] : port);
-    //Manager::Get()->AddDriver( "HID Controller", Driver::ControllerInterface_Hid );
-	
 	// Set the default poll interval to 30 minutes
 	Manager::Get()->SetPollInterval(1000*60*30, false); //default to 30 minutes
 	

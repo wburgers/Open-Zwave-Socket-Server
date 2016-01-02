@@ -22,19 +22,12 @@ namespace OZWSS {
 		return result;
 	}
 
-	Configuration::Configuration() :	conf_ini_location("./Config.ini"), 
-										ws_port(0),
-										lat(0.0),
-										lon(0.0),
-										tcp_port(""),
-										morningScene(""),
-										dayScene(""),
-										nightScene(""),
-										awayScene(""),
-										certificate(""),
-										certificate_key(""),
-										google_client_id(""),
-										google_client_secret("") {
+	Configuration::Configuration(std::string conf_ini_location_) : conf_ini_location(conf_ini_location_),
+			lat(0.0), lon(0.0), ws_port(0), tcp_port(""),
+			morningScene(""), dayScene(""), nightScene(""), awayScene(""),
+			certificate(""), certificate_key(""),
+			google_client_id(""), google_client_secret("")
+	{
 		create_string_map();
 		std::ifstream conffile;
 		if(open_filestream(conffile))
