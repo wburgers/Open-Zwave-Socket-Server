@@ -197,13 +197,13 @@ void create_string_maps() {
 	s_mapStringCommands["ALARMLIST"] = AlarmList;
 	s_mapStringCommands["TEST"] = Test;
 	s_mapStringCommands["EXIT"] = Exit;
-	
+
 	s_mapStringTriggers["Sunrise"] = Sunrise;
 	s_mapStringTriggers["Sunset"] = Sunset;
 	s_mapStringTriggers["Thermostat"] = Thermostat;
 	s_mapStringTriggers["Update"] = Update;
 	s_mapStringTriggers["Cache init"] = Cache_init;
-	
+
 	s_mapStringOptions["Name"] = Name;
 	s_mapStringOptions["Location"] = Location;
 	s_mapStringOptions["Switch"] = SwitchC;
@@ -212,7 +212,7 @@ void create_string_maps() {
 	s_mapStringOptions["Polling"] = Polling;
 	s_mapStringOptions["Wake-up Interval"] = Wake_up_Interval;
 	s_mapStringOptions["Battery report"] = Battery_report;
-	
+
 	MapCommandClassBasic["0x03|0x11"] = 0x94;
 	MapCommandClassBasic["0x03|0x12"] = 0x30;
 	MapCommandClassBasic["0x08|0x02"] = 0x40;
@@ -248,7 +248,7 @@ bool init_Scenes();
 bool init_WakeupIntervalCache();
 void *websockets_main(void* arg);
 void *run_socket(void* arg);
-std::string process_commands(std::string data, Json::Value& message);
+void process_commands(std::string data, Json::Value& message);
 bool parse_option(int32 home, int32 node, std::string name, std::string value, bool& save, std::string& err_message);
 bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, std::string label, std::string& err_message);
 std::string activateScene(string sclabel);
@@ -348,13 +348,13 @@ void OnNotification(Notification const* _notification, void* _context) {
 				nodeInfo->m_LastSeen = time( NULL );
 				ValueID vid = _notification->GetValueID();
 				for(list<ValueID>::iterator vit = nodeInfo->m_values.begin(); vit != nodeInfo->m_values.end(); ++vit) {
-                    if((*vit) == vid) {
-                        nodeInfo->m_values.erase(vit);
-                        break;
-                    }
-                }
+					if((*vit) == vid) {
+						nodeInfo->m_values.erase(vit);
+						break;
+					}
+				}
 				nodeInfo->m_values.push_back(vid);
-				
+
 				if(strcmp(Manager::Get()->GetNodeType(_notification->GetHomeId(), _notification->GetNodeId()).c_str(), "Setpoint Thermostat") == 0 && strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Heating 1") == 0) {
 					std::string location = Manager::Get()->GetNodeLocation(_notification->GetHomeId(), _notification->GetNodeId());
 					float currentSetpoint = 20.00;
@@ -366,7 +366,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 							if(rit->setpoint != currentSetpoint) {
 								rit->setpoint = currentSetpoint;
 								std::cout << "Changing setpoint for room " << location << endl;
-								
+
 								for(list<NodeInfo*>::iterator nit = g_nodes.begin(); nit != g_nodes.end(); ++nit) {
 									if(_notification->GetHomeId() == (*nit)->m_homeId && _notification->GetNodeId() == (*nit)->m_nodeId) {
 										continue;
@@ -388,7 +388,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 						}
 					}
 				}
-				
+
 				if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Temperature") == 0) {
 					std::string location = Manager::Get()->GetNodeLocation(_notification->GetHomeId(), _notification->GetNodeId());
 					float currentTemp = 20.00;
@@ -404,7 +404,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 						}
 					}
 				}
-				
+
 				if(strcmp(Manager::Get()->GetValueLabel(vid).c_str(), "Wake-up Interval") == 0) {
 					stringstream key;
 					key << (int) _notification->GetHomeId() << (int) _notification->GetNodeId();
@@ -426,7 +426,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 						}
 					}
 				}
-				
+
 				SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT, true);
 			}
 			break;
@@ -436,7 +436,7 @@ void OnNotification(Notification const* _notification, void* _context) {
 		{
 			// One of the node's association groups has changed
 			if(NodeInfo* nodeInfo = GetNodeInfo(_notification)) {
-				nodeInfo = nodeInfo;            // placeholder for real action
+				nodeInfo = nodeInfo;			// placeholder for real action
 			}
 			break;
 		}
@@ -466,10 +466,10 @@ void OnNotification(Notification const* _notification, void* _context) {
 					break;
 				}
 			}
-			
+
 			WakeupIntervalCache.clear();
 			init_WakeupIntervalCache();
-			
+
 			break;
 		}
 
@@ -526,10 +526,10 @@ void OnNotification(Notification const* _notification, void* _context) {
 			uint32 const homeId = _notification->GetHomeId();
 			uint8 const nodeId = _notification->GetNodeId();
 			if(NodeInfo* nodeInfo = GetNodeInfo(homeId, nodeId)) {
-				
+
 				uint8 generic = Manager::Get()->GetNodeGeneric(homeId , nodeId);
 				uint8 specific = Manager::Get()->GetNodeSpecific(homeId, nodeId);
-				
+
 				snprintf(buffer, 10, "0x%02X|0x%02X", generic, specific);
 				if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
 					nodeInfo->m_basicmapping = MapCommandClassBasic[buffer];
@@ -544,18 +544,18 @@ void OnNotification(Notification const* _notification, void* _context) {
 						nodeInfo->m_basicmapping = MapCommandClassBasic[buffer];
 					}
 				}
-				
+
 				nodeInfo->m_LastSeen = time(NULL);
 			}
 			break;
 		}
-		
+
 		case Notification::Type_ControllerCommand:
 		{
 			OnControllerUpdate(_notification->GetEvent());
 			break;
 		}
-		
+
 		case Notification::Type_Notification:
 			switch(_notification->GetNotification()) {
 				case Notification::Code_Awake: {
@@ -665,10 +665,10 @@ static int open_zwaveCallback(	struct lws *wsi,
 		case LWS_CALLBACK_RECEIVE: {
 			// log what we recieved.
 			printf("Received websocket data: %s\n", (char*) in);
-			
+
 			std::string data = (char*) in;
 			Json::Value message;
-			
+
 			try {
 				if(pss->authenticated || data.compare(0,4,"AUTH") == 0)
 					process_commands(data, message);
@@ -680,21 +680,21 @@ static int open_zwaveCallback(	struct lws *wsi,
 			catch (std::exception const& e) {
 				std::cout << "Exception: " << e.what() << endl;
 			}
-			
+
 			if(data.compare(0,4,"AUTH") == 0 && message["auth"] == true) {
 				pss->authenticated = true;
 			}
-			
+
 			std::string response;
 			Json::FastWriter fastWriter;
 			response = fastWriter.write(message);
-			
+
 			//put the response in the writebuffer
 			LWSMessage lwsresponse;
 			lwsresponse.message = response;
 			lwsresponse.broadcast = false;
 			lwsresponse.wsi = wsi;
-			
+
 			ringbuffer[ringbuffer_head] = lwsresponse;
 			if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
 				ringbuffer_head = 0;
@@ -702,7 +702,7 @@ static int open_zwaveCallback(	struct lws *wsi,
 			else {
 				ringbuffer_head++;
 			}
-			
+
 			lws_callback_on_writable_all_protocol(lws_get_context(wsi), lws_get_protocol(wsi));
 			break;
 		}
@@ -711,7 +711,7 @@ static int open_zwaveCallback(	struct lws *wsi,
 				LWSMessage lwsmessage = ringbuffer[pss->ringbuffer_tail];
 				if(pss->authenticated && (lwsmessage.broadcast || (lwsmessage.wsi == wsi))) {
 					char buf[LWS_SEND_BUFFER_PRE_PADDING + lwsmessage.message.length() + LWS_SEND_BUFFER_POST_PADDING];
-					
+
 					memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], lwsmessage.message.c_str(),
 						   lwsmessage.message.length());
 
@@ -728,7 +728,7 @@ static int open_zwaveCallback(	struct lws *wsi,
 							n, lwsmessage.message.length());
 					}
 				}
-				
+
 				if (pss->ringbuffer_tail == (MAX_MESSAGE_QUEUE - 1))
 					pss->ringbuffer_tail = 0;
 				else
@@ -836,11 +836,11 @@ int main(int argc, char* argv[]) {
 
 	Manager::Create();
 
-    // Add a callback handler to the manager.  The second argument is a context that
-    // is passed to the OnNotification method.  If the OnNotification is a method of
-    // a class, the context would usually be a pointer to that class object, to
-    // avoid the need for the notification handler to be a static.
-    Manager::Get()->AddWatcher(OnNotification, NULL);
+	// Add a callback handler to the manager.  The second argument is a context that
+	// is passed to the OnNotification method.  If the OnNotification is a method of
+	// a class, the context would usually be a pointer to that class object, to
+	// avoid the need for the notification handler to be a static.
+	Manager::Get()->AddWatcher(OnNotification, NULL);
 
 	// Add a Z-Wave Driver
 	Manager::Get()->AddDriver(port);
@@ -848,12 +848,12 @@ int main(int argc, char* argv[]) {
 
 	// Set the default poll interval to 30 minutes
 	Manager::Get()->SetPollInterval(1000*60*30, false); //default to 30 minutes
-	
-	// Now we just wait for the driver to become ready, and then write out the loaded config.
-    // In a normal app, we would be handling notifications and building a UI for the user.
-    pthread_cond_wait(&initCond, &initMutex);
 
-    if(!g_initFailed) {
+	// Now we just wait for the driver to become ready, and then write out the loaded config.
+	// In a normal app, we would be handling notifications and building a UI for the user.
+	pthread_cond_wait(&initCond, &initMutex);
+
+	if(!g_initFailed) {
 		create_string_maps();
 		if(!init_Rooms()) {
 			std::cerr << "Something went wrong configuring the Rooms";
@@ -876,7 +876,7 @@ int main(int argc, char* argv[]) {
 		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
 		printf("Dropped: %d Retries: %d\n", data.m_dropped, data.m_retries);
 		printf("***************************************************** \n");
-		
+
 		//start the websocket in a new thread
 		pthread_t websocket_thread;
 		if(pthread_create(&websocket_thread , NULL ,  websockets_main ,NULL) < 0) {
@@ -885,7 +885,7 @@ int main(int argc, char* argv[]) {
 		else {
 			std::cout << "Websocket starting" << endl;
 		}
-		
+
 		string tcpport;
 		if(!conf->GetTCPPort(tcpport)) {
 			std::cerr << "There is no TCP port set in Config.ini, please specify one and try again.\n";
@@ -895,13 +895,13 @@ int main(int argc, char* argv[]) {
 		string host = "0.0.0.0";
 		using libsocket::inet_stream_server;
 		using libsocket::inet_stream;
-			
+
 		inet_stream_server srv(host,tcpport,LIBSOCKET_IPv4);
-		
+
 		while(!stopping) {
-			
+
 			inet_stream* client = srv.accept();
-			
+
 			pthread_t thread;
 			try {
 				if(pthread_create(&thread, NULL, run_socket, (void*) client) < 0) {
@@ -916,13 +916,13 @@ int main(int argc, char* argv[]) {
 			}
 		}
 		srv.destroy();
-    }
-	
+	}
+
 	// program exit (clean up)
 	delete conf;
 	Manager::Get()->WriteConfig(g_homeId);
 	std::cout << "Closing connection to Zwave Controller" << endl;
-	
+
 	if(strcasecmp(port.c_str(), "usb") == 0) {
 		Manager::Get()->RemoveDriver("HID Controller");
 	}
@@ -955,7 +955,7 @@ bool init_Rooms() {
 		if(location.empty()) {
 			continue;
 		}
-		
+
 		float currentSetpoint=0.0;
 		float currentTemp=0.0;
 		for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
@@ -970,13 +970,13 @@ bool init_Rooms() {
 				}
 			}
 		}
-		
+
 		Room newroom;
 		newroom.name = location;
 		newroom.setpoint = currentSetpoint;
 		newroom.currentTemp = currentTemp;
 		newroom.changed = false;
-		
+
 		list<Room>::iterator rit;
 		for(rit = roomList.begin(); rit != roomList.end(); ++rit)
 		{
@@ -996,7 +996,7 @@ bool init_Rooms() {
 			roomList.push_back(newroom);
 		}
 	}
-	
+
 	return true;
 }
 
@@ -1007,13 +1007,13 @@ bool init_Rooms() {
 bool init_Scenes() {
 	uint8 numscenes = 0;
 	uint8 *sceneIds = new uint8[numscenes];
-	
+
 	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
 		std::cout << "No Scenes found" << endl;
 	}
-	
+
 	int scid=0;
-	
+
 	for(int i=0; i<numscenes; ++i) {
 		scid = sceneIds[i];
 		SceneListItem newScene;
@@ -1089,13 +1089,13 @@ void *websockets_main(void* arg) {
 		return 0;
 	}
 	const char *interface = NULL;
-	
+
 	const char *cert_path = NULL;
 	const char *key_path = NULL;
-	
+
 	std::string certificate, certificate_key;
 	conf->GetCertificateInfo(certificate, certificate_key);
-	
+
 	if(!certificate.empty() && !certificate_key.empty()) {
 		cert_path = certificate.c_str();
 		key_path = certificate_key.c_str();
@@ -1145,14 +1145,14 @@ void *run_socket(void* arg) {
 	using libsocket::inet_stream;
 	inet_stream* client;
 	client = (inet_stream*) arg;
-	
+
 	while(!stopping) {
 		try { // command parsing errors
 			//get commands from the socket
 			std::string data;
 			data.resize(1024);
 			*client >> data;
-			
+
 			if(data.empty()) {
 				std::cout << "Socket client closed the connection" << endl;
 				client->destroy();
@@ -1188,10 +1188,9 @@ void *run_socket(void* arg) {
 // process_commands
 // when a command comes in, parse it, execute it and send the response back
 //-----------------------------------------------------------------------------
-std::string process_commands(std::string data, Json::Value& message) {
+void process_commands(std::string data, Json::Value& message) {
 	vector<string> v;
 	split(data, "~", v);
-	string output = "";
 	message["command"] = trim(v[0]);
 	switch (s_mapStringCommands[trim(v[0])])
 	{
@@ -1206,19 +1205,19 @@ std::string process_commands(std::string data, Json::Value& message) {
 				gapi_message["client_id"] = client_id;
 				gapi_message["client_secret"] = client_secret;
 				gapi_message["redirect_url"] = "";
-				
+
 				std::string tokeninfo_response(1024,NULL), profile(2048,NULL), closing_data(1024,NULL);
-				
+
 				try {
 					unix_stream_client sock("/tmp/gapi.sock");
-					
+
 					Json::FastWriter fastWriter;
 					sock << fastWriter.write(gapi_message).c_str();
 					sock >> tokeninfo_response;
 					sock >> profile;
 					sock.shutdown(LIBSOCKET_WRITE);
 					sock >> closing_data;
-					
+
 					if(!tokeninfo_response.empty() && !profile.empty())
 					{
 						message["profile"] = profile;
@@ -1286,15 +1285,15 @@ std::string process_commands(std::string data, Json::Value& message) {
 			}
 			int Node = 0;
 			string Options = "";
-			
+
 			Node = lexical_cast<int>(v[1]);
 			Options=trim(v[2]);
-			
+
 			if(!Options.empty()) {
 				vector<string> OptionList;
 				split(Options, "<>", OptionList);
 				bool save = false;
-				
+
 				for(std::vector<string>::iterator it = OptionList.begin(); it != OptionList.end(); ++it) {
 					std::size_t found = (*it).find('=');
 					if(found!=std::string::npos) {
@@ -1313,7 +1312,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 					Manager::Get()->WriteConfig(g_homeId);
 				}
 			}
-			
+
 			stringstream ssNode;
 			ssNode << Node;
 			message["text"] = "Chosen option set for Node=" + ssNode.str();
@@ -1344,7 +1343,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 				if(strcmp(location.c_str(), rit->name.c_str()) !=0) {
 					continue;
 				}
-				
+
 				switch(s_mapStringCommands[trim(v[1])])
 				{
 					case Plus:
@@ -1369,7 +1368,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 				message["room"]["currentTemp"] = ssCurrentTemp.str();
 				std::cout << "Room " << location << " termperature setpoint set to " << rit->setpoint << endl;
 			}
-			
+
 			SetAlarm("Thermostat", SOCKET_COLLECTION_TIMEOUT, true);
 			SetAlarm("Update", SOCKET_COLLECTION_TIMEOUT+1, true);
 			break;
@@ -1419,17 +1418,17 @@ std::string process_commands(std::string data, Json::Value& message) {
 					}
 					uint8 numscenes = 0;
 					uint8 *sceneIds = new uint8[numscenes];
-					
+
 					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
 						throw OZWSS::ProtocolException("No scenes created", 3);
 					}
-					
+
 					string sclabel = trim(v[2]);
 					int scid=0;
 					int Node = lexical_cast<int>(v[3]);
 					double value = lexical_cast<double>(v[4]);
 					bool response;
-					
+
 					for(int i=0; i<numscenes; ++i) {
 						scid = sceneIds[i];
 						if(sclabel != Manager::Get()->GetSceneLabel(scid)) {
@@ -1453,7 +1452,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 										continue;
 									}
 								}
-								
+
 								switch((*vit).GetType()) {
 									case ValueID::ValueType_Bool: {
 										bool bool_value;
@@ -1494,7 +1493,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 										message["error"]["err_message"] = "unknown ValueType";
 										break;
 								}
-								
+
 								if(!response) {
 									message["error"]["err_main"] = "Could not add valueid/value to scene " + sclabel + "\nPlease send me an issue at Github";
 								} else {
@@ -1514,18 +1513,18 @@ std::string process_commands(std::string data, Json::Value& message) {
 					}
 					uint8 numscenes = 0;
 					uint8 *sceneIds = new uint8[numscenes];
-					
+
 					if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
 						throw OZWSS::ProtocolException("No scenes created", 3);
 					}
-					
+
 					string sclabel = trim(v[2]);
 					int scid=0;
 					int Node = lexical_cast<int>(v[3]);
-					
+
 					for(int i=0; i<numscenes; ++i){
 						scid = sceneIds[i];
-						
+
 						if(sclabel != Manager::Get()->GetSceneLabel(scid)){
 							continue;
 						}
@@ -1610,7 +1609,7 @@ std::string process_commands(std::string data, Json::Value& message) {
 		case Cron:
 		{
 			//planning to add a google calendar add-in here.
-			
+
 			//set the daily alarms and check if any have passed already (I execute zcron.sh around 4:15 AM)
 			time_t sunrise = 0, sunset = 0;
 			float lat, lon;
@@ -1619,19 +1618,19 @@ std::string process_commands(std::string data, Json::Value& message) {
 				SetAlarm("Sunrise", sunrise, false);
 				SetAlarm("Sunset", sunset, false);
 			}
-			
+
 			//synchronize devices with Command_Class_Clock
 			for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 				time_t rawtime;
 				tm * timeinfo;
 				time(&rawtime);
 				timeinfo=localtime(&rawtime);
-				
+
 				for(list<ValueID>::iterator vit = (*it)->m_values.begin(); vit != (*it)->m_values.end(); ++vit) {
 					if((*vit).GetCommandClassId() != COMMAND_CLASS_CLOCK) {
 						continue;
 					}
-					
+
 					switch((*vit).GetIndex()) {
 						case 0: {
 							std::string deviceDayValue;
@@ -1733,7 +1732,6 @@ std::string process_commands(std::string data, Json::Value& message) {
 			throw OZWSS::ProtocolException("Unknown command", 1);
 			break;
 	}
-	return output;
 }
 
 //-----------------------------------------------------------------------------
@@ -1797,7 +1795,7 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 					cmdclass = COMMAND_CLASS_BASIC;
 					std::cout << "mapped to BASIC" << endl;
 				}
-				
+
 				// Mark the basic command class values for polling
 				for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it){
 					if((*it).GetCommandClassId() == cmdclass) {
@@ -1844,7 +1842,7 @@ bool parse_option(int32 home, int32 node, std::string name, std::string value, b
 		{
 			stringstream key;
 			key << (int) home << (int) node;
-			
+
 			if(WakeupIntervalCache.count(key.str()) == 0)
 			{
 				std::cout << key.str() << endl;
@@ -1890,7 +1888,7 @@ bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, s
 	err_message = "";
 	bool response;
 	bool cmdfound = false;
-	
+
 	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
 		// Find the correct instance
 		for(list<ValueID>::iterator it = nodeInfo->m_values.begin(); it != nodeInfo->m_values.end(); ++it) {
@@ -1902,7 +1900,7 @@ bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, s
 			if(label != Manager::Get()->GetValueLabel(*it)) {
 				continue;
 			}
-			
+
 			switch((*it).GetType()) {
 				case ValueID::ValueType_Bool: {
 					response = Manager::Get()->SetValue(*it, lexical_cast<bool>(value));
@@ -1964,15 +1962,15 @@ bool SetValue(int32 home, int32 node, std::string const value, uint8 cmdclass, s
 std::string activateScene(std::string sclabel) {
 	uint8 numscenes = 0;
 	uint8 *sceneIds = new uint8[numscenes];
-	
+
 	sclabel = trim(sclabel);
-	
+
 	if((numscenes = Manager::Get()->GetAllScenes(&sceneIds))==0) {
 		throw OZWSS::ProtocolException("No scenes created", 3);
 	}
-	
+
 	int scid=0;
-	
+
 	for(int i=0; i<numscenes; ++i) {
 		scid = sceneIds[i];
 		if(sclabel != Manager::Get()->GetSceneLabel(scid)){
@@ -2057,10 +2055,10 @@ std::string switchAtHome() {
 //-----------------------------------------------------------------------------
 bool try_map_basic(int32 home, int32 node) {
 	char buffer[10];
-	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {					
+	if(NodeInfo* nodeInfo = GetNodeInfo(home, node)) {
 		uint8 generic = Manager::Get()->GetNodeGeneric(home, node);
-		uint8 specific = Manager::Get()->GetNodeSpecific(home, node);			
-		
+		uint8 specific = Manager::Get()->GetNodeSpecific(home, node);
+
 		snprintf(buffer, 10, "0x%02X|0x%02X", generic, specific);
 		if(MapCommandClassBasic.find(buffer) != MapCommandClassBasic.end()) {
 			nodeInfo->m_basicmapping = MapCommandClassBasic[buffer];
@@ -2111,7 +2109,7 @@ void sigalrm_handler(int sig) {
 	alarmset = false;
 	Alarm currentAlarm = alarmList.front();
 	alarmList.pop_front();
-	
+
 	switch(s_mapStringTriggers[currentAlarm.description])
 	{
 		case Sunrise:
@@ -2152,7 +2150,7 @@ void sigalrm_handler(int sig) {
 		{
 			for(list<Room>::iterator rit = roomList.begin(); rit != roomList.end(); ++rit) {
 				std::cout << "sending commands for room " << rit->name << endl;
-				if(rit->changed) {	
+				if(rit->changed) {
 					for(list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it) {
 						if(strcmp(rit->name.c_str(), Manager::Get()->GetNodeLocation(g_homeId, (*it)->m_nodeId).c_str()) != 0) {
 							continue;
@@ -2175,18 +2173,18 @@ void sigalrm_handler(int sig) {
 		case Update:
 		{
 			std::cout << "Adding notification to message list" << endl;
-			
+
 			Json::Value message;
 			message["command"] = "UPDATE";
 			//add individual updates for devices or scenes later
-			
+
 			LWSMessage lwsmessage;
 			Json::FastWriter fastWriter;
 			lwsmessage.message = fastWriter.write(message);
 			lwsmessage.broadcast = true;
-			
+
 			ringbuffer[ringbuffer_head] = lwsmessage;
-			
+
 			if (ringbuffer_head == (MAX_MESSAGE_QUEUE - 1)) {
 				ringbuffer_head = 0;
 			}
@@ -2209,7 +2207,7 @@ void sigalrm_handler(int sig) {
 			// if that fails, check if the description can be parsed as a command
 		break;
 	}
-	
+
 	// more alarms on the alarmList? Set the next one (the list is already sorted...)
 	time_t now = time(NULL);
 	// remove alarms that are set in the past...
