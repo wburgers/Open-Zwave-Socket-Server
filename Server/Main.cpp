@@ -41,6 +41,7 @@
 #include <cstring>
 #include <string>
 #include <sstream>
+#include <iterator>
 #include <stdio.h>
 #include <iostream>
 #include <vector>
@@ -260,10 +261,10 @@ void sigalrm_handler(int sig);
 //-----------------------------------------------------------------------------
 // Common functions that can be used in every other function
 //-----------------------------------------------------------------------------
-void split(const string& s, const string& delimiter, vector<string>& v) {
-	string::size_type i = 0;
-	string::size_type j = s.find(delimiter);
-	while (j != string::npos) {
+void split(const std::string& s, const std::string& delimiter, std::vector<std::string>& v) {
+	std::string::size_type i = 0;
+	std::string::size_type j = s.find(delimiter);
+	while (j != std::string::npos) {
 		v.push_back(s.substr(i, j - i));
 		i = j += delimiter.length();
 		j = s.find(delimiter, j);
@@ -271,7 +272,7 @@ void split(const string& s, const string& delimiter, vector<string>& v) {
 	v.push_back(s.substr(i, s.length()));
 }
 
-string trim(string s) {
+std::string trim(std::string s) {
 	return s.erase(s.find_last_not_of(" \n\r\t") + 1);
 }
 
@@ -286,6 +287,22 @@ T lexical_cast(const std::string& s) {
 	}
 
 	return result;
+}
+
+std::string join( const std::vector<std::string>& elements, const char* const separator)
+{
+    switch (elements.size())
+    {
+        case 0:
+            return "";
+        case 1:
+            return elements[0];
+        default:
+            std::ostringstream os;
+            std::copy(elements.begin(), elements.end()-1, std::ostream_iterator<std::string>(os, separator));
+            os << *elements.rbegin();
+            return os.str();
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -1288,6 +1305,7 @@ void process_commands(std::string data, Json::Value& message) {
 
 			Node = lexical_cast<int>(v[1]);
 			Options=trim(v[2]);
+			std::vector<std::string> executedOptions;
 
 			if(!Options.empty()) {
 				vector<string> OptionList;
@@ -1301,21 +1319,24 @@ void process_commands(std::string data, Json::Value& message) {
 						std::string value = (*it).substr(found+1);
 						std::string err_message = "";
 						if(!parse_option(g_homeId, Node, name, value, save, err_message)) {
-							message["error"]["err_main"] = "Error while parsing options";
+							message["error"]["err_main"] = "Error while parsing option " + name;
 							message["error"]["err_message"] = err_message;
 							break;
+						}
+						else {
+							executedOptions.push_back(name);
 						}
 					}
 				}
 				if(save) {
-					//save details to XML
 					Manager::Get()->WriteConfig(g_homeId);
 				}
 			}
 
 			stringstream ssNode;
 			ssNode << Node;
-			message["text"] = "Chosen option set for Node=" + ssNode.str();
+
+			message["text"] = "The following options have been set for Node " + ssNode.str() + ": " + join(executedOptions, ", ");
 			break;
 		}
 		case RoomListC:
