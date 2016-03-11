@@ -15,16 +15,16 @@
     "polymer": "Polymer/polymer#^1.1.0",
     "iron-elements": "PolymerElements/iron-elements",
     "paper-elements": "PolymerElements/paper-elements",
-	"platinum-sw": "PolymerElements/platinum-sw#^1.2.0",
-	"google-signin": "GoogleWebComponents/google-signin#^1.0.0",
-
-	"websocket-component": "git://github.com/wburgers/websocket-component",
-	"OZWSS-Polymer-status-dot": "git://github.com/wburgers/OZWSS-Polymer-status-dot#master",
-	"OZWSS-Polymer-switch-button": "git://github.com/wburgers/OZWSS-Polymer-switch-button#master",
-	"OZWSS-Polymer-google-signin-status": "git://github.com/wburgers/OZWSS-Polymer-google-signin-status#master",
-	"OZWSS-Polymer-room-list": "git://github.com/wburgers/OZWSS-Polymer-room-list#master",
-	"OZWSS-Polymer-scene-list": "git://github.com/wburgers/OZWSS-Polymer-scene-list#master",
-	"OZWSS-Polymer-single-room": "git://github.com/wburgers/OZWSS-Polymer-single-room#master"
+    "platinum-sw": "PolymerElements/platinum-sw#^1.2.0",
+    "google-signin": "GoogleWebComponents/google-signin#^1.0.0",
+	
+    "websocket-component": "^1.0.0",
+    "OZWSS-Polymer-status-dot": "git://github.com/wburgers/OZWSS-Polymer-status-dot#master",
+    "OZWSS-Polymer-switch-button": "git://github.com/wburgers/OZWSS-Polymer-switch-button#master",
+    "OZWSS-Polymer-google-signin-status": "git://github.com/wburgers/OZWSS-Polymer-google-signin-status#master",
+    "OZWSS-Polymer-room-list": "git://github.com/wburgers/OZWSS-Polymer-room-list#master",
+    "OZWSS-Polymer-scene-list": "git://github.com/wburgers/OZWSS-Polymer-scene-list#master",
+    "OZWSS-Polymer-single-room": "git://github.com/wburgers/OZWSS-Polymer-single-room#master"
   },
   "description": "Polymer Client for the Open-Zwave-Socket-Server",
   "main": "index.html",

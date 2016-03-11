@@ -60,10 +60,7 @@
 //Open-Zwave includes:
 #include "Options.h"
 #include "Manager.h"
-#include "Driver.h"
-#include "Node.h"
 #include "Scene.h"
-#include "Group.h"
 #include "Notification.h"
 
 //Project includes
