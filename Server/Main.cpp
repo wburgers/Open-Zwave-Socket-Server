@@ -1128,6 +1128,7 @@ void *websockets_main(void* arg) {
 	info.ssl_cert_filepath = cert_path;
 	info.ssl_private_key_filepath = key_path;
 	info.options = opts;
+	info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
 
 	// create libwebsocket context representing this server
 	context = lws_create_context(&info);
