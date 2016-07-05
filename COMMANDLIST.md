@@ -16,7 +16,7 @@ You can set multiple values for a single device in one SETNODE command. These ar
 ```
 SETNODE~2~Name=living room lamp 1<>Location=living room
 ```
-For multilevel devices (dimmers), the Level can be set from 0 to 99. A binary switch can be set with Switch=true/false.
+For multilevel devices (dimmers), the Level can be set from 0 to 99. A binary switch can be set with Switch=1/0 (for on or off respectively).
 
 ### ROOMLIST
 Much like the ALIST, this is a list of locations in you zwave network.
